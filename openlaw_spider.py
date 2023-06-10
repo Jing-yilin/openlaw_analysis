@@ -1,4 +1,4 @@
-import requests, bs4, re, os, time, tqdm, csv, json
+import requests, re, os, time, tqdm, json
 import pandas as pd
 import yaml
 
