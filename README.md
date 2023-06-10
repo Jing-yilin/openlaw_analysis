@@ -13,22 +13,20 @@
 - strat_page: 开始爬取的页数
 - end_page: 结束爬取的页数
 
-
-
 # 运行项目
 ## 1. 安装依赖
+在terminal中运行一下命令，安装依赖
 ```shell
 pip install -r requirements.txt
 ```
+## 2.修改配置文件
+在`config.py`中修改配置文件，修改为目标的关键词以及爬取的页数，以及要分析的关键词
 ## 2. 运行爬虫
 ```shell
-python openlaw_spider.py
+python main.py
 ```
-获取的数据文件将被存储在 `./data` 目录下
-## 3. 运行数据分析以及可视化
-```shell
-python data_analysis.py
-```
+
+数据将会被存储在 `./data` 目录下
 分析产生的可视化文件将被存储在 `./result` 目录下
 
 
