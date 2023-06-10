@@ -1,4 +1,5 @@
 from openlaw_spider import OpenLawSpider
+from analysis import Analyzer
 from utils.file_control import read_config
 
 if __name__ == "__main__":
@@ -7,6 +8,7 @@ if __name__ == "__main__":
     cookie = config["cookie"]
     user_agent = config["user_agent"]
     search_keyword = config["search_keyword"]
+    analysis_keyword = config["analysis_keyword"]
     strat_page = config["strat_page"]
     end_page = config["end_page"]
 
@@ -16,7 +18,9 @@ if __name__ == "__main__":
     if spider.crawl_links(): # 如果爬取成功
         # 2. 根据链接，爬取内容,保存为json文件
         spider.crawl_contents()
-        # 3. 把json文件转换成excel文件
+        # 3. 把json文件转换成excel文件，以便于用户查看
         spider.save_to_excel()
 
     # 数据分析
+    analyzer = Analyzer(keyword=analysis_keyword)
+    analyzer.auto_analysis()
