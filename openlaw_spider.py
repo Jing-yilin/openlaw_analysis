@@ -64,7 +64,10 @@ def filter_text(text):
         text = re.sub(r"<span.*?>|<\/span>", "", text)
         # 去除text中的所有<p><\p>的内容
         text = re.sub(r"<p.*?>|<\/p>", "", text)
-        # 去除 &nbsp;
+        # 去除 &nbsp; &lt; &gt; &amp;
+        text = re.sub(r"&lt;", "<", text)
+        text = re.sub(r"&gt;", ">", text)
+        text = re.sub(r"&amp;", "&", text)
         text = re.sub(r"&nbsp;", "", text)
         return text
 
