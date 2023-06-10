@@ -4,6 +4,7 @@ import pandas as pd
 from wordcloud import WordCloud
 import matplotlib.pyplot as plt
 import seaborn as sns
+import yaml
 
 province_city_dic = {
     "北京": ["北京"],
@@ -422,7 +423,11 @@ def draw_bar(
 
 
 if __name__ == "__main__":
-    keyword = "网络个人信息侵权"  # 关键词
+    # 读取 yaml里面的 analysis_keyword
+    with open("./config.yaml", "r", encoding="utf-8") as f:
+        config = yaml.load(f, Loader=yaml.FullLoader)
+    keyword = config["analysis_keyword"]
+     
     law_dic_path = "./dic/law_dic.txt"  # 法律词典路径
     plt.rcParams["font.sans-serif"] = ["Microsoft YaHei"]  # 设置字体
     save_path = f"./result/{keyword}"  # 保存路径

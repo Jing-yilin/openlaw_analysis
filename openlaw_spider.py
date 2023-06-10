@@ -8,7 +8,7 @@ with open("config.yaml", "r", encoding="utf-8") as f:
     config = yaml.load(f, Loader=yaml.FullLoader)
     cookie = config["cookie"]
     user_agent = config["user_agent"]
-    keyword = config["keyword"]
+    keyword = config["search_keyword"]
     strat_page = config["strat_page"]
     end_page = config["end_page"]
 
@@ -29,8 +29,18 @@ def get_url(page: str, keyword: str):
     link_result = pattern.findall(text)
     return link_result
 
+def create_dir(dir_name) -> None:
+    # 拆分 dir_name
+    dir_names = dir_name.split("/")
+    # 创建文件夹
+    for i in range(len(dir_names)):
+        path = "/".join(dir_names[: i + 1])
+        if path == "" or path == ".":
+            continue
+        if not os.path.exists(path):
+            os.mkdir(path)
 
-def crawl_links(strat_page: int, end_page: int, keyword: str):
+def crawl_links(strat_page: int, end_page: int, keyword: str, save_dir):
     print(f"======开始爬取链接======")
     links = []
     pages = list(range(strat_page, end_page + 1))
@@ -41,14 +51,15 @@ def crawl_links(strat_page: int, end_page: int, keyword: str):
         # 睡眠5秒
         time.sleep(2)
     print(f"======链接爬取完成======")
-
-    if not os.path.exists("./data"):
-        os.mkdir("./data")
-    with open(f"./data/{keyword}_links.csv", "w", encoding="utf-8") as f:
-        for link in links:
-            link = "http://openlaw.cn" + link
-            f.write(link + "\n")
-    print(f"======保存完成======")
+    if links is None or len(links) == 0:
+        print(f"没有爬取到链接,请更新cookie!!!")
+        return
+    else:
+        with open(f"{save_dir}/{keyword}_links.csv", "w", encoding="utf-8") as f:
+            for link in links:
+                link = "http://openlaw.cn" + link
+                f.write(link + "\n")
+        print(f"======保存完成======")
 
 def filter_text(text):
     if text is None or len(text) == 0:
@@ -87,7 +98,7 @@ def get_content(url: str):
     content["verdict"] = filter_text(re.findall('<div class="part" id="Verdict">\s*<!--.*?-->\s*<p>(.*?)<\/p>\s*<\/div>', text))
     return content
 
-def crawl_contents(links: list, keyword):
+def crawl_contents(links: list, keyword, save_dir):
     contents = []
     for url in tqdm.tqdm(links):
         print(f"正在爬取内容:{url}")
@@ -96,32 +107,35 @@ def crawl_contents(links: list, keyword):
         time.sleep(2)
     print(f"======内容爬取完成======")
     # 保存
-    with open(f"./data/{keyword}_contents.json", "w", encoding="utf-8") as f:
+    with open(f"{save_dir}/{keyword}_contents.json", "w", encoding="utf-8") as f:
         json.dump(contents, f, ensure_ascii=False)
 
 
 if __name__ == "__main__":
+    save_dir = f"./data/{keyword}"
+    create_dir(save_dir)
+
     # 1. 爬取链接,保存到 f'./data/{keyword}_links.csv' 下
-    crawl_links(strat_page, end_page, keyword)
+    crawl_links(strat_page, end_page, keyword, save_dir)
 
     # 2. 读取data文件夹下的csv文件里的链接
-    file = f"./data/{keyword}_links.csv"
+    file = f"{save_dir}/{keyword}_links.csv"
     with open(file, "r", encoding="utf-8") as f:
         links = f.readlines()
         links = [link.strip() for link in links]
 
     # 3. 根据链接，爬取内容,保存为json文件
-    crawl_contents(links, keyword)
+    crawl_contents(links, keyword, save_dir)
 
     # 4. 读取json并转化成DataFrame
-    file = f"./data/{keyword}_contents.json"
+    file = f"{save_dir}/{keyword}_contents.json"
     with open(file, "r", encoding="utf-8") as f:
         contents = json.load(f)
     df = pd.DataFrame(contents)
     # 修改标题
     df.rename(columns={"title": "标题", "case_number": "案号", "court": "法院", "data": "日期", "cause": "案由", "type": "类型", "procedure": "程序", "procedure_explain": "程序说明", "tags": "标签", "opinion": "观点", "verdict": "判决"}, inplace=True)
     # 保存到excel
-    df.to_excel(f"./data/{keyword}_contents.xlsx", index=False)
+    df.to_excel(f"{save_dir}/{keyword}_contents.xlsx", index=False)
     print(f"======保存完成======")
 
 
