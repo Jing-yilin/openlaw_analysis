@@ -5,6 +5,7 @@ from utils.file_control import create_dir
 
 class OpenLawSpider:
     def __init__(self, keyword, strat_page, end_page, cookie, user_agent, links=[], contents = []):
+        self.base_url = "http://openlaw.cn"
         self.keyword = keyword
         self.strat_page = strat_page
         self.end_page = end_page
@@ -21,7 +22,7 @@ class OpenLawSpider:
 
     def get_url(self, page: str) -> list:
         keyword_ = requests.utils.quote(self.keyword)
-        url = f"http://openlaw.cn/search/judgement/advanced?showResults=true&keyword={keyword_}&causeId=&caseNo=&litigationType=&docType=&litigant=&plaintiff=&defendant=&thirdParty=&lawyerId=&lawFirmId=&legals=&courtId=&judgeId=&clerk=&judgeDateYear=&judgeDateBegin=&judgeDateEnd=&zone=&procedureType=&lawId=&lawSearch=&courtLevel=&judgeResult=&wordCount=&page={page}"
+        url = f"{self.base_url}/search/judgement/advanced?showResults=true&keyword={keyword_}&causeId=&caseNo=&litigationType=&docType=&litigant=&plaintiff=&defendant=&thirdParty=&lawyerId=&lawFirmId=&legals=&courtId=&judgeId=&clerk=&judgeDateYear=&judgeDateBegin=&judgeDateEnd=&zone=&procedureType=&lawId=&lawSearch=&courtLevel=&judgeResult=&wordCount=&page={page}"
         text = requests.get(url, headers=self.headers).text
         # 把keyword中文转换成url编码
         # 1. 创建正则表达式对象
