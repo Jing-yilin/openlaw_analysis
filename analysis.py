@@ -5,6 +5,7 @@ from wordcloud import WordCloud
 import matplotlib.pyplot as plt
 import seaborn as sns
 import yaml
+from utils.file_control import create_dir
 
 province_city_dic = {
     "北京": ["北京"],
@@ -325,18 +326,6 @@ def read_content(keyword, sort_by_data=True):
     df["日期"] = pd.to_datetime(df["日期"])
     df.sort_values(by="日期", inplace=True)
     return df
-
-
-def create_dir(dir_name) -> None:
-    # 拆分 dir_name
-    dir_names = dir_name.split("/")
-    # 创建文件夹
-    for i in range(len(dir_names)):
-        path = "/".join(dir_names[: i + 1])
-        if path == "" or path == ".":
-            continue
-        if not os.path.exists(path):
-            os.mkdir(path)
 
 
 def read_law_dic(path) -> list:
