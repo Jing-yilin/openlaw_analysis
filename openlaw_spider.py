@@ -41,6 +41,10 @@ class OpenLawSpider:
         return link_result
 
     def crawl_links(self) -> bool:
+        # 错误处理
+        if self.strat_page > self.end_page:
+            print(f"起始页{self.strat_page}大于结束页{self.end_page}!!!")
+            return False
         links = {}
         file_name = f"{self.save_dir}/{self.keyword}_links.json"
         str_pages = list(
