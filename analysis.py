@@ -313,6 +313,7 @@ class Analyzer:
         # 修改标题
         df.rename(
             columns={
+                "url": "链接",
                 "title": "标题",
                 "case_number": "案号",
                 "court": "法院",
