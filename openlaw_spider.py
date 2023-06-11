@@ -1,10 +1,14 @@
 import requests, re, time, tqdm, json
 import pandas as pd
 import yaml
+import os
 from utils.file_control import create_dir
 
+
 class OpenLawSpider:
-    def __init__(self, keyword, strat_page, end_page, cookie, user_agent, links=[], contents = []):
+    def __init__(
+        self, keyword, strat_page, end_page, cookie, user_agent, links={}, contents=[]
+    ):
         self.base_url = "http://openlaw.cn"
         self.keyword = keyword
         self.strat_page = strat_page
@@ -29,34 +33,48 @@ class OpenLawSpider:
         pattern = re.compile(r"/judgement/[0-9a-z]*\?keyword=" + keyword_)
         # 2. 使用正则表达式对象匹配text
         link_result = pattern.findall(text)
+        link_result = [self.base_url + link for link in link_result]
         return link_result
 
     def crawl_links(self) -> bool:
+        links = {}
+        file_name = f"{self.save_dir}/{self.keyword}_links.json"
+        target_pages = list(range(self.strat_page, self.end_page + 1))
+        # 情况1： 链接已经爬取过了
+        if os.path.exists(file_name):
+            links = json.load(open(file_name, "r", encoding="utf-8"))
+            self.links = links
+            # 从self.links中删除不在target_pages中的page
+            for page in self.links.keys():
+                if page not in target_pages:
+                    self.links.pop(page)
+            for page in range(self.strat_page, self.end_page + 1):
+                if page in self.links.keys():
+                    target_pages.remove(page)
+
         print(f"======开始爬取链接======")
-        links = []
-        pages = list(range(self.strat_page, self.end_page + 1))
-        for page in tqdm.tqdm(pages):
+        for page in tqdm.tqdm(target_pages):
             link_result = self.get_url(page)
-            links.extend(link_result)
+            if link_result is None or len(link_result) == 0:
+                print(f"第{page}页没有爬取到链接!!!")
+                continue
+            # 同时记录page和link_result
+            self.links[page] = link_result
+            links[page] = link_result
             # 睡眠5秒
             time.sleep(2)
-        print(f"======链接爬取完成======")
-        links = ["http://openlaw.cn" + link for link in links]
-        self.links = links
-        if links is None or len(links) == 0:
+        print(f"======链接爬取完结束=====")
+
+        if self.links is None or len(self.links.keys()) == 0:
             print(f"没有爬取到链接,请更新cookie!!!")
             return False
         else:
-            file_name = f"{self.save_dir}/{self.keyword}_links.csv"
-            with open(
-                file_name, "w", encoding="utf-8"
-            ) as f:
-                for link in links:
-                    f.write(link + "\n")
+            with open(file_name, "w", encoding="utf-8") as f:
+                json.dump(links, f, ensure_ascii=False)
             print(f"======{file_name}保存完成======")
             return True
 
-    def filter_text(self, text)->str:
+    def filter_text(self, text) -> str:
         if text is None or len(text) == 0:
             return ""
         else:
@@ -80,6 +98,7 @@ class OpenLawSpider:
     def get_content(self, url: str) -> dict:
         content = {}
         text = requests.get(url, headers=self.headers).text
+        content["url"] = url
         content["title"] = self.filter_text(
             re.findall('<h2 class="entry-title">(.*)</h2>', text)
         )
@@ -128,18 +147,35 @@ class OpenLawSpider:
 
     def crawl_contents(self):
         contents = []
-        for url in tqdm.tqdm(self.links):
-            print(f"正在爬取内容:{url}")
-            content = self.get_content(url)
+        urls = []  # 已经爬取过的链接
+        file_name = f"{self.save_dir}/{self.keyword}_contents.json"
+        target_urls = []
+        for page, links in self.links.items():
+            target_urls.extend(links)
+
+        # 打开文件检查是否已经爬取过
+        if os.path.exists(file_name):
+            contents = json.load(open(file_name, "r", encoding="utf-8"))
+            self.contents = contents
+            # 已经爬取过的链接
+            urls = [content["url"] for content in self.contents]
+            # 去除已爬取过的内容了 链接不属于self.links的内容
+            for row in self.contents:
+                if row["url"] not in target_urls:
+                    self.contents.remove(row)
+
+        for link in tqdm.tqdm(target_urls):
+            if link in urls:
+                print(f"链接:{link} 已经爬取过")
+                continue
+            print(f"正在爬取内容:{link}")
+            content = self.get_content(link)
+            self.contents.append(content)
             contents.append(content)
             time.sleep(2)
         print(f"======内容爬取完成======")
-        self.contents = contents
-        file_name = f"{self.save_dir}/{self.keyword}_contents.json"
         # 保存
-        with open(
-            file_name, "w", encoding="utf-8"
-        ) as f:
+        with open(file_name, "w", encoding="utf-8") as f:
             json.dump(contents, f, ensure_ascii=False)
         print(f"======{file_name}保存完成======")
 
@@ -148,6 +184,7 @@ class OpenLawSpider:
         # 修改标题
         df.rename(
             columns={
+                "url": "链接",
                 "title": "标题",
                 "case_number": "案号",
                 "court": "法院",
@@ -166,7 +203,3 @@ class OpenLawSpider:
         file_name = f"{self.save_dir}/{self.keyword}_contents.xlsx"
         df.to_excel(file_name, index=False)
         print(f"======{file_name}保存完成======")
-
-
-
-
