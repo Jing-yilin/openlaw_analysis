@@ -21,6 +21,6 @@ if __name__ == "__main__":
         # 3. 把json文件转换成excel文件，以便于用户查看
         spider.save_to_excel()
 
-    # 数据分析
-    analyzer = Analyzer(keyword=analysis_keyword)
-    analyzer.auto_analysis()
+        # 数据分析
+        analyzer = Analyzer(keyword=analysis_keyword)
+        analyzer.auto_analysis()
