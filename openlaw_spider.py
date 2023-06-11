@@ -1,4 +1,8 @@
-import requests, re, time, tqdm, json
+import requests
+import re
+import time
+import tqdm
+import json
 import pandas as pd
 import yaml
 import os
@@ -39,18 +43,27 @@ class OpenLawSpider:
     def crawl_links(self) -> bool:
         links = {}
         file_name = f"{self.save_dir}/{self.keyword}_links.json"
-        target_pages = list(range(self.strat_page, self.end_page + 1))
-        # 情况1： 链接已经爬取过了
+        str_pages = list(
+            str(i) for i in range(self.strat_page, self.end_page + 1)
+        )  # ["1", "2", "3", "4", "5", ...]
+        target_pages = str_pages.copy()  # ["1", "2", "3", "4", "5", ...]
+        # 情况: 链接已经爬取过了
         if os.path.exists(file_name):
-            links = json.load(open(file_name, "r", encoding="utf-8"))
+            print(f"======{file_name}已经存在，正在查看======")
+            links = json.load(
+                open(file_name, "r", encoding="utf-8"))  # 读取在本地的links
             self.links = links
             # 从self.links中删除不在target_pages中的page
-            for page in self.links.keys():
+            pages = list(self.links.keys())
+            for page in pages:
                 if page not in target_pages:
                     self.links.pop(page)
-            for page in range(self.strat_page, self.end_page + 1):
-                if page in self.links.keys():
+            for page in str_pages:
+                if page in pages:
                     target_pages.remove(page)
+        if len(target_pages) == 0:
+            print(f"======所有链接已经爬取过了======")
+            return True
 
         print(f"======开始爬取链接======")
         for page in tqdm.tqdm(target_pages):
@@ -58,11 +71,13 @@ class OpenLawSpider:
             if link_result is None or len(link_result) == 0:
                 print(f"第{page}页没有爬取到链接!!!")
                 continue
-            # 同时记录page和link_result
-            self.links[page] = link_result
-            links[page] = link_result
-            # 睡眠5秒
-            time.sleep(2)
+            else:
+                # 同时记录page和link_result
+                self.links[page] = link_result
+                links[page] = link_result
+                # 睡眠5秒
+                time.sleep(2)
+                print("睡眠2秒")
         print(f"======链接爬取完结束=====")
 
         if self.links is None or len(self.links.keys()) == 0:
@@ -103,22 +118,28 @@ class OpenLawSpider:
             re.findall('<h2 class="entry-title">(.*)</h2>', text)
         )
         content["case_number"] = self.filter_text(
-            re.findall('<li class="clearfix ht-kb-pf-standard">案号：(.*)</li>', text)
+            re.findall(
+                '<li class="clearfix ht-kb-pf-standard">案号：(.*)</li>', text)
         )
         content["court"] = self.filter_text(
-            re.findall('<li class="clearfix ht-kb-pf-standard">法院：(.*)</li>', text)
+            re.findall(
+                '<li class="clearfix ht-kb-pf-standard">法院：(.*)</li>', text)
         )
         content["data"] = self.filter_text(
-            re.findall('<li class="clearfix ht-kb-pf-standard">时间：(.*)</li>', text)
+            re.findall(
+                '<li class="clearfix ht-kb-pf-standard">时间：(.*)</li>', text)
         )
         content["cause"] = self.filter_text(
-            re.findall('<li class="clearfix ht-kb-pf-standard">案由：(.*)</li>', text)
+            re.findall(
+                '<li class="clearfix ht-kb-pf-standard">案由：(.*)</li>', text)
         )
         content["type"] = self.filter_text(
-            re.findall('<li class="clearfix ht-kb-pf-standard">类型：(.*)</li>', text)
+            re.findall(
+                '<li class="clearfix ht-kb-pf-standard">类型：(.*)</li>', text)
         )
         content["procedure"] = self.filter_text(
-            re.findall('<li class="clearfix ht-kb-pf-standard">程序：(.*)</li>', text)
+            re.findall(
+                '<li class="clearfix ht-kb-pf-standard">程序：(.*)</li>', text)
         )
         content["procedure_explain"] = self.filter_text(
             re.findall(
