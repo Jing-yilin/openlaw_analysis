@@ -5,3 +5,4 @@ pyyaml
 wordcloud
 matplotlib
 seaborn
+pycrypto
