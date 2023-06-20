@@ -14,6 +14,12 @@
 - end_page: 结束爬取的页数
 
 # 运行项目
+
+## 0. 新建环境
+```shell
+conda create -n openlaw python=3.8
+conda activate openlaw
+```
 ## 1. 安装依赖
 在terminal中运行一下命令，安装依赖
 ```shell
@@ -21,13 +27,24 @@ pip install -r requirements.txt
 ```
 ## 2.修改配置文件
 在`config.py`中修改配置文件，修改为目标的关键词以及爬取的页数，以及要分析的关键词
-## 2. 运行爬虫
+## 3. 运行爬虫
 ```shell
 python main.py
 ```
 
 数据将会被存储在 `./data` 目录下
 分析产生的可视化文件将被存储在 `./result` 目录下
+
+# 其他
+
+如果安装`crypto`报错，可以尝试以下方法
+
+```shell
+pip install 'setuptools<58'
+pip cache remove pycrypto pycryptodome
+pip uninstall PyCrypto pycryptodome
+pip install PyCrypto pycryptodome
+```
 
 
 
