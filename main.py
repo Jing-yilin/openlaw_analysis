@@ -2,9 +2,10 @@ from openlaw_spider import OpenLawSpider
 from analysis import Analyzer
 from utils.file_control import read_config
 
-if __name__ == "__main__":
-    # 读取配置文件
+def main():
     config = read_config()
+    username = config["username"]
+    password = config["password"]
     cookie = config["cookie"]
     user_agent = config["user_agent"]
     keyword = config["keyword"]
@@ -12,7 +13,7 @@ if __name__ == "__main__":
     end_page = config["end_page"]
 
     # 数据爬取
-    spider = OpenLawSpider(keyword, strat_page, end_page, cookie, user_agent)
+    spider = OpenLawSpider(username, password, keyword, strat_page, end_page, cookie, user_agent)
     # 1. 爬取链接,保存为csv文件
     if spider.crawl_links(): # 如果爬取成功
         # 2. 根据链接，爬取内容,保存为json文件
@@ -23,3 +24,7 @@ if __name__ == "__main__":
         # 数据分析
         analyzer = Analyzer(keyword)
         analyzer.auto_analysis()
+
+if __name__ == "__main__":
+    main()
+   
