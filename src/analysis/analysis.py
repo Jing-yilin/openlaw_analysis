@@ -5,6 +5,7 @@ from wordcloud import WordCloud
 import matplotlib.pyplot as plt
 import seaborn as sns
 import yaml
+import pathlib
 
 from ..utils import create_dir, read_config
 
@@ -302,7 +303,7 @@ class Analyzer:
         self.content = None
         self.law_dic_path = law_dic_path
         self.read_law_dic()
-        self.save_dir = f"./result/{keyword}"
+        self.save_dir = str(pathlib.Path.cwd() / "result" / self.keyword).replace("\\", "/")
         create_dir(self.save_dir)
 
     def read_content(self, sort_by_data=True) -> None:
@@ -486,11 +487,11 @@ class Analyzer:
         self.read_content()
         print("=======开始分析=======")
         self.analyze_law()
-        print("法条分析完成")
+        print("- 法条分析完成")
         self.analyze_cause()
-        print("案由分析完成")
+        print("- 案由分析完成")
         self.analyze_tag()
-        print("标签分析完成")
+        print("- 标签分析完成")
         self.analyze_year()
-        print("年份分析完成")
-        print(f"=======分析完成，可查看{self.save_dir}文件夹=======")
+        print("- 年份分析完成")
+        print(f"=======分析完成，可查看 {self.save_dir} 文件夹=======")
