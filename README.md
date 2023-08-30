@@ -31,3 +31,12 @@ python main.py
 
 
 
+# 结果示例
+
+![个人信息侵权_案由词云](C:\Users\q1154\Desktop\Py_Code\openlaw_analysis\imgs\个人信息侵权_案由词云.png)
+
+![个人信息侵权_标签词频](C:\Users\q1154\Desktop\Py_Code\openlaw_analysis\imgs\个人信息侵权_标签词频.png)
+
+![个人信息侵权_标签词云](C:\Users\q1154\Desktop\Py_Code\openlaw_analysis\imgs\个人信息侵权_标签词云.png)
+
+![个人信息侵权_法条词频](C:\Users\q1154\Desktop\Py_Code\openlaw_analysis\imgs\个人信息侵权_法条词频.png)
