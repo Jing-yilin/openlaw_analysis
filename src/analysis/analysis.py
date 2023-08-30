@@ -5,7 +5,8 @@ from wordcloud import WordCloud
 import matplotlib.pyplot as plt
 import seaborn as sns
 import yaml
-from utils.file_control import create_dir, read_config
+
+from ..utils import create_dir, read_config
 
 province_city_dic = {
     "北京": ["北京"],
@@ -440,7 +441,9 @@ class Analyzer:
     def analyze_cause(self) -> None:
         cause_count = {}
         for cause in self.content["案由"]:
-            cause_count[cause] = self.content["案由"].apply(lambda x: x.count(cause)).sum()
+            cause_count[cause] = (
+                self.content["案由"].apply(lambda x: x.count(cause)).sum()
+            )
         self.draw_word_cloud_by_freq(cause_count, f"{self.keyword}_案由词云.png")
         self.draw_barh(
             self.sort_dict_by_value(cause_count),
@@ -449,6 +452,7 @@ class Analyzer:
             "案由",
             f"{self.keyword}案由词频",
         )
+
     def analyze_tag(self) -> None:
         tag_count = {}
         tags = []
@@ -464,6 +468,7 @@ class Analyzer:
             "标签",
             f"{self.keyword}标签词频",
         )
+
     def analyze_year(self) -> None:
         year_count = self.content["日期"].apply(lambda x: x.year).value_counts().to_dict()
         self.draw_bar(
@@ -473,7 +478,7 @@ class Analyzer:
             "案件数量",
             f"{self.keyword}案件数量随时间变化",
         )
-    
+
     def auto_analysis(self) -> None:
         plt.rcParams["font.sans-serif"] = ["Microsoft YaHei"]  # 设置字体
         plt.figure(figsize=(10, 5), dpi=300)  # 设置图片大小和分辨率

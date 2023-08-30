@@ -1,9 +1,5 @@
 requests
-re
-os
-time
 tqdm
-json
 pandas
 pyyaml
 wordcloud

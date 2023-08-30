@@ -1,7 +1,7 @@
 import os
 import yaml
 
-def read_config(file_name="config.yaml"):
+def read_config(file_name="config.yaml") -> dict:
     # 读取config.yaml文件
     with open(file_name, "r", encoding="utf-8") as f:
         config = yaml.load(f, Loader=yaml.FullLoader)

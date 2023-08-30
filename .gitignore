@@ -1,5 +1,11 @@
+
+# output
 data
-.ipynb_checkpoints
 result
+
+# ipython notebook checkpoints
+.ipynb_checkpoints
+
+# cache files
 utils/__pycache__
 __pycache__

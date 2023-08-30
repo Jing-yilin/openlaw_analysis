@@ -1,8 +1,8 @@
-from openlaw_spider import OpenLawSpider
-from analysis import Analyzer
-from utils.file_control import read_config
+from src.spider import OpenLawSpider
+from src.analysis import Analyzer
+from src.utils import read_config
 
-if __name__ == "__main__":
+def main():
     # 读取配置文件
     config = read_config()
     cookie = config["cookie"]
@@ -23,3 +23,6 @@ if __name__ == "__main__":
         # 数据分析
         analyzer = Analyzer(keyword)
         analyzer.auto_analysis()
+
+if __name__ == "__main__":
+    main()

@@ -6,7 +6,11 @@ import json
 import pandas as pd
 import yaml
 import os
-from utils.file_control import create_dir
+import sys
+import pathlib
+
+from ..utils import create_dir
+
 
 
 class OpenLawSpider:
@@ -54,8 +58,7 @@ class OpenLawSpider:
         # 情况: 链接已经爬取过了
         if os.path.exists(file_name):
             print(f"======{file_name}已经存在，正在查看======")
-            links = json.load(
-                open(file_name, "r", encoding="utf-8"))  # 读取在本地的links
+            links = json.load(open(file_name, "r", encoding="utf-8"))  # 读取在本地的links
             self.links = links
             # 从self.links中删除不在target_pages中的page
             pages = list(self.links.keys())
@@ -122,28 +125,22 @@ class OpenLawSpider:
             re.findall('<h2 class="entry-title">(.*)</h2>', text)
         )
         content["case_number"] = self.filter_text(
-            re.findall(
-                '<li class="clearfix ht-kb-pf-standard">案号：(.*)</li>', text)
+            re.findall('<li class="clearfix ht-kb-pf-standard">案号：(.*)</li>', text)
         )
         content["court"] = self.filter_text(
-            re.findall(
-                '<li class="clearfix ht-kb-pf-standard">法院：(.*)</li>', text)
+            re.findall('<li class="clearfix ht-kb-pf-standard">法院：(.*)</li>', text)
         )
         content["data"] = self.filter_text(
-            re.findall(
-                '<li class="clearfix ht-kb-pf-standard">时间：(.*)</li>', text)
+            re.findall('<li class="clearfix ht-kb-pf-standard">时间：(.*)</li>', text)
         )
         content["cause"] = self.filter_text(
-            re.findall(
-                '<li class="clearfix ht-kb-pf-standard">案由：(.*)</li>', text)
+            re.findall('<li class="clearfix ht-kb-pf-standard">案由：(.*)</li>', text)
         )
         content["type"] = self.filter_text(
-            re.findall(
-                '<li class="clearfix ht-kb-pf-standard">类型：(.*)</li>', text)
+            re.findall('<li class="clearfix ht-kb-pf-standard">类型：(.*)</li>', text)
         )
         content["procedure"] = self.filter_text(
-            re.findall(
-                '<li class="clearfix ht-kb-pf-standard">程序：(.*)</li>', text)
+            re.findall('<li class="clearfix ht-kb-pf-standard">程序：(.*)</li>', text)
         )
         content["procedure_explain"] = self.filter_text(
             re.findall(
