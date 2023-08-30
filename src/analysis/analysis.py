@@ -298,7 +298,7 @@ province_city_dic = {
 
 
 class Analyzer:
-    def __init__(self, keyword, law_dic_path="./dic/law_dic.txt") -> None:
+    def __init__(self, keyword, law_dic_path="./common/dic/law_dic.txt") -> None:
         self.keyword = keyword
         self.content = None
         self.law_dic_path = law_dic_path
@@ -354,13 +354,13 @@ class Analyzer:
         return dict(sorted(dic.items(), key=lambda x: x[1], reverse=desc)[start:end])
 
     def draw_word_cloud_by_freq(
-        self, word_freq, file_name, w=1000, h=500, dpi=300
+        self, word_freq, file_name, w=1000, h=500, dpi=300, font_path="./common/fonts/微软雅黑.ttf"
     ) -> None:
         # 清空画布
         plt.clf()
         # 根据词频绘制词云
         wc = WordCloud(
-            font_path="./fonts/微软雅黑.ttf", background_color="white", width=w, height=h
+            font_path=font_path, background_color="white", width=w, height=h
         )
         wc.generate_from_frequencies(word_freq)
         plt.imshow(wc)
