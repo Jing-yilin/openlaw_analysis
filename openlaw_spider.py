@@ -50,8 +50,10 @@ class OpenLawSpider:
     
     def update_cookie(self):
         url = self.base_url + "/login.jsp"
+        print("url:", url) # url: http://openlaw.cn/login.jsp
         response = requests.get(url, headers=self.headers, timeout=10)
         response.raise_for_status()
+        print(response.headers) # {'Connection': 'close', 'Transfer-Encoding': 'chunked', 'Content-Encoding': 'gzip', 'Content-Type': 'text/html;charset=UTF-8', 'Date': 'Wed, 21 Jun 2023 05:46:28 GMT', 'Server': 'nginx', 'Set-Cookie': 'SESSION=MDNhYjkxNDQtOTNkNS00ZDNjLWJhOTEtMTc2MDZhMDI0YTJh; Path=/; HttpOnly', 'Vary': 'Accept-Encoding', 'X-Content-Type-Options': 'nosniff', 'X-Xss-Protection': '1; mode=block'}
         if response.status_code != 200:
             print("更新cookie失败!!!")
             return
@@ -64,7 +66,9 @@ class OpenLawSpider:
             timestamp = int(time.time())
             self.set_timestamp(timestamp)
             #  "Hm_lvt_a105f5952beb915ade56722dc85adf05=1686368033; SESSION=NTYwNTUxZTQtZmE4Ni00Y2FlLWJkYWUtNjE1NGU1NGEzYjQ3; Hm_lpvt_a105f5952beb915ade56722dc85adf05=1686453940"
-            cookie = f"Hm_lvt_a105f5952beb915ade56722dc85adf05={self.timestamp}; SESSION={session}; Hm_lpvt_a105f5952beb915ade56722dc85adf05={last_timestamp}"
+            cookie = f"Hm_lvt_a105f5952beb915ade56722dc85adf05={self.timestamp}; \
+                        SESSION={session}; \
+                        Hm_lpvt_a105f5952beb915ade56722dc85adf05={last_timestamp}"
             self.set_cookie(cookie)
             self.set_headers(self.user_agent, self.cookie)
             print("cookie更新成功!!!")
@@ -77,7 +81,7 @@ class OpenLawSpider:
         data = {
             "_csrf": csrf,
             "username": requests.utils.quote(self.username),
-            "password": key_encrypt(self.password),
+            "password":key_encrypt(self.password),
             "_spring_security_remember_me": "true",
         }
         '''
