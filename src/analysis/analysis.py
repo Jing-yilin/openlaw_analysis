@@ -298,17 +298,17 @@ province_city_dic = {
 
 
 class Analyzer:
-    def __init__(self, keyword, law_dic_path="./common/dic/law_dic.txt") -> None:
-        self.keyword = keyword
+    def __init__(self, config, law_dic_path="./common/dic/law_dic.txt") -> None:
+        self.keyword = config["关键词"]
         self.content = None
         self.law_dic_path = law_dic_path
         self.read_law_dic()
-        self.save_dir = str(pathlib.Path.cwd() / "result" / self.keyword).replace("\\", "/")
-        create_dir(self.save_dir)
+        self.base_dir = f'./data/{config["关键词"]}_{config["案件类型"]}_{config["文书类型"]}_{config["法院（地区）"]}_{config["审判程序"]}_{config["法院层级"]}_{config["判决结果"]}_{config["判决开始时间"]}_{config["判决结束时间"]}'
+        create_dir(self.base_dir)
 
     def read_content(self, sort_by_data=True) -> None:
         # 读取json并转化成DataFrame
-        file = f"./data/{self.keyword}/{self.keyword}_contents.json"
+        file = self.base_dir + "/contents.json"
         with open(file, "r", encoding="utf-8") as f:
             contents = json.load(f)
         df = pd.DataFrame(contents)
@@ -365,7 +365,7 @@ class Analyzer:
         wc.generate_from_frequencies(word_freq)
         plt.imshow(wc)
         plt.axis("off")
-        plt.savefig(self.save_dir + "/" + file_name, dpi=dpi)
+        plt.savefig(self.base_dir + "/" + file_name, dpi=dpi)
 
     def draw_barh(
         self,
@@ -390,7 +390,7 @@ class Analyzer:
         plt.grid(grid)
         sns.barplot(x=list(dic.values()), y=list(dic.keys()))
         plt.savefig(
-            self.save_dir + "/" + file_name,
+            self.base_dir + "/" + file_name,
             dpi=dpi,
             bbox_inches="tight" if tight else None,
         )
@@ -418,7 +418,7 @@ class Analyzer:
         plt.title(title)
         sns.barplot(x=list(dic.keys()), y=list(dic.values()))
         plt.savefig(
-            self.save_dir + "/" + file_name,
+            self.base_dir + "/" + file_name,
             dpi=dpi,
             bbox_inches="tight" if tight else None,
         )
@@ -494,4 +494,4 @@ class Analyzer:
         print("- 标签分析完成")
         self.analyze_year()
         print("- 年份分析完成")
-        print(f"=======分析完成，可查看 {self.save_dir} 文件夹=======")
+        print(f"=======分析完成，可查看 {self.base_dir} 文件夹=======")

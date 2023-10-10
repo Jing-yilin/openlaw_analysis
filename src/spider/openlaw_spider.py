@@ -1,49 +1,140 @@
 import requests
 import re
-import time
-import tqdm
 import json
 import pandas as pd
 import asyncio
 import aiohttp
-import yaml
 import os
 import sys
 import pathlib
-from codetiming import Timer
 
 from ..utils import create_dir
 
 
+DOC_TYPE_MAP = {
+    "": "",
+    "通知书": "Notification",
+    "判决书": "Verdict",
+    "调解书": "Mediation",
+    "决定书": "Decision",
+    "令": "Warrant",
+    "裁定书": "Ruling",
+    "其他": "Other",
+}
+
+PROCEDURE_TYPE_MAP = {
+    "": "",
+    "一审": "First",
+    "二审": "Second",
+    "再审": "Retrial",
+    "复核": "Review",
+    "刑罚变更": "PenaltyChange",
+    "其他": "Other",
+}
+
+COURT_LEVEL_MAP = {
+    "": "",
+    "最高人民法院": "0",
+    "高级人民法院": "1",
+    "中级人民法院": "2",
+    "基层人民法院": "3",
+}
+
+
+JUDGE_RESULT_MAP = {
+    "": "",
+    "未知": "Unknow",
+    "完全支持": "Victory",
+    "部分支持": "Half",
+    "不支持": "Half",
+    "撤销": "Half",
+    "其他": "Other",
+}
+
+
+LITIGATION_TYPE_MAP = {
+    "": "",
+    "民事": "Civil",
+    "刑事": "Criminal",
+    "行政": "Administration",
+    "赔偿": "Compensation",
+    "执行": "Execution",
+}
+
+ZONE_MAP = {
+    "":"",
+    "北京市": "北京市",
+    "天津市": "天津市",
+    "河北省": "河北省",
+    "山西省": "山西省",
+    "内蒙古自治区": "内蒙古自治区",
+    "辽宁省": "辽宁省",
+    "吉林省": "吉林省",
+    "黑龙江省": "黑龙江省",
+    "上海市": "上海市",
+    "江苏省": "江苏省",
+    "浙江省": "浙江省",
+    "安徽省": "安徽省",
+    "福建省": "福建省",
+    "江西省": "江西省",
+    "山东省": "山东省",
+    "河南省": "河南省",
+    "湖北省": "湖北省",
+    "湖南省": "湖南省",
+    "广东省": "广东省",
+    "广西壮族自治区": "广西壮族自治区",
+    "海南省": "海南省",
+    "重庆市": "重庆市",
+    "四川省": "四川省",
+    "贵州省": "贵州省",
+    "云南省": "云南省",
+    "西藏自治区": "西藏自治区",
+    "陕西省": "陕西省",
+    "甘肃省": "甘肃省",
+    "青海省": "青海省",
+    "宁夏回族自治区": "宁夏回族自治区",
+    "新疆维吾尔自治区": "新疆维吾尔自治区",
+    "台湾省": "台湾省",
+    "香港特别行政区": "香港特别行政区",
+    "澳门特别行政区": "澳门特别行政区",
+}
+
 class OpenLawSpider:
     def __init__(
         self,
-        keyword: str,
-        strat_page: int,
-        end_page: int,
-        cookie: str,
-        user_agent: str,
+        config: dict,
         links: dict = {},
         contents: list = [],
         session: aiohttp.ClientSession = None,
         concurrent: int = 10,
     ):
         self.base_url = "http://openlaw.cn"
-        self.keyword = keyword
-        self.strat_page = strat_page
-        self.end_page = end_page
-        self.save_dir = f"./data/{keyword}"
-        self.cookie = cookie
-        self.user_agent = user_agent
+
+        self.config = config
+        self.cookie = config["cookie"]
+        self.user_agent = config["user_agent"]
+        self.keyword = config["关键词"]
+        self.litigation_type = LITIGATION_TYPE_MAP[config["案件类型"]]
+        self.doc_type = DOC_TYPE_MAP[config["文书类型"]]
+        self.zone = config["法院（地区）"]
+        self.procedure_type = PROCEDURE_TYPE_MAP[config["审判程序"]]
+        self.court_level = COURT_LEVEL_MAP[config["法院层级"]]
+        self.judge_result = JUDGE_RESULT_MAP[config["判决结果"]]
+        self.judge_date_begin = config["判决开始时间"]
+        self.judge_date_end = config["判决结束时间"]
+        self.strat_page = config["strat_page"]
+        self.end_page = config["end_page"]
+
         self.headers = {
-            "User-Agent": user_agent,
-            "Cookie": cookie,
+            "User-Agent": self.user_agent,
+            "Cookie": self.cookie,
         }
         self.links = links
         self.contents = contents
         self.session = session
         self.concurrent = concurrent
-        create_dir(self.save_dir)
+        self.base_dir = f'./data/{config["关键词"]}_{config["案件类型"]}_{config["文书类型"]}_{config["法院（地区）"]}_{config["审判程序"]}_{config["法院层级"]}_{config["判决结果"]}_{config["判决开始时间"]}_{config["判决结束时间"]}'
+        create_dir(self.base_dir)
 
     async def get_url(
         self, target_page_queue: asyncio.Queue, session: aiohttp.ClientSession
@@ -51,7 +142,7 @@ class OpenLawSpider:
         while not target_page_queue.empty():
             page = await target_page_queue.get()
             keyword_ = requests.utils.quote(self.keyword)
-            url = f"{self.base_url}/search/judgement/advanced?showResults=true&keyword={keyword_}&causeId=&caseNo=&litigationType=&docType=&litigant=&plaintiff=&defendant=&thirdParty=&lawyerId=&lawFirmId=&legals=&courtId=&judgeId=&clerk=&judgeDateYear=&judgeDateBegin=&judgeDateEnd=&zone=&procedureType=&lawId=&lawSearch=&courtLevel=&judgeResult=&wordCount=&page={page}"
+            url = f"{self.base_url}/search/judgement/advanced?showResults=true&keyword={keyword_}&causeId=&caseNo=&litigationType={self.litigation_type}&docType={self.doc_type}&litigant=&plaintiff=&defendant=&thirdParty=&lawyerId=&lawFirmId=&legals=&courtId=&judgeId=&clerk=&judgeDateYear=&judgeDateBegin={self.judge_date_begin}&judgeDateEnd={self.judge_date_end}&zone={self.zone}&procedureType={self.procedure_type}&lawId=&lawSearch=&courtLevel={self.court_level}&judgeResult={self.judge_result}&wordCount=&page={page}"
             print(f"\n- 正在爬取第{page}页: {url}")
             async with session.get(url, headers=self.headers) as response:
                 text = await response.text()
@@ -70,7 +161,7 @@ class OpenLawSpider:
             print(f"起始页{self.strat_page}大于结束页{self.end_page}!!!")
             return False
         links = {}
-        file_name = f"{self.save_dir}/{self.keyword}_links.json"
+        file_name = self.base_dir + "/links.json"
         str_pages = list(
             str(i) for i in range(self.strat_page, self.end_page + 1)
         )  # ["1", "2", "3", "4", "5", ...]
@@ -109,7 +200,7 @@ class OpenLawSpider:
             return False
         else:
             with open(file_name, "w", encoding="utf-8") as f:
-                json.dump(links, f, ensure_ascii=False)
+                json.dump(self.links, f, ensure_ascii=False)
             print(f"======{file_name}保存完成======")
             return True
 
@@ -189,12 +280,12 @@ class OpenLawSpider:
                 )
             )
             self.contents.append(content)
-            # asyncio.sleep(0.5)
+
 
     async def crawl_contents(self):
         contents = []
         urls = []  # 已经爬取过的链接
-        file_name = f"{self.save_dir}/{self.keyword}_contents.json"
+        file_name = self.base_dir + "/contents.json"
         target_urls = []
         for page, links in self.links.items():
             target_urls.extend(links)
@@ -250,6 +341,7 @@ class OpenLawSpider:
             inplace=True,
         )
         # 保存到excel
-        file_name = f"{self.save_dir}/{self.keyword}_contents.xlsx"
+        file_name = self.base_dir + "/contents.xlsx"
+
         df.to_excel(file_name, index=False)
         print(f"======{file_name}保存完成======")
