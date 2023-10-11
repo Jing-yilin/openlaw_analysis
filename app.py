@@ -49,7 +49,8 @@ async def main():
     config = {}
     if st.session_state.step >= 0:
         st.title("📖OpenLaw爬取助手")
-        config["关键词"] = st.text_input("关键词", placeholder="请输入关键词")
+        ai_mode = st.checkbox("AI模式")
+        config["关键词"] = st.text_input("关键词", placeholder="请输入关键词", value="房屋租赁")
         config["案件类型"] = st.selectbox("案件类型", list(LITIGATION_TYPE_MAP.keys()))
         config["法院（地区）"] = st.selectbox("法院（地区）", list(ZONE_MAP.keys()))
         config["法院层级"] = st.selectbox("法院层级", list(COURT_LEVEL_MAP.keys()))
@@ -87,6 +88,7 @@ async def main():
                 config,
                 session=session,
                 concurrent=50,
+                ai_mode=ai_mode,
             )
             with st.spinner("正在爬取链接🔗..."):
                 # 1. 爬取链接,保存为csv文件
@@ -107,11 +109,6 @@ async def main():
                         st.json(value, expanded=False)
                     else:
                         st.json(value, expanded=True)
-
-                # ai提取
-                with st.spinner("正在AI提取信息，请耐心等待..."):
-                    await spider.ai_process()
-                st.subheader("AI提取信息成功")
                 
                 df_xlsx = to_excel(spider.df)
                 file_name = spider.base_dir + ".xlsx"
@@ -120,7 +117,14 @@ async def main():
                                                 file_name= file_name)
                 st.header(f"爬取内容成功[共{len(spider.contents)}条]")
                 for content in spider.contents:
-                    st.json(content, expanded=True)
+                    st.markdown(f"**{content['标题']}**")
+                    st.json(content, expanded=False)
+
+                # ai提取
+                if ai_mode:
+                    with st.spinner("正在AI提取信息，请耐心等待..."):
+                        await spider.ai_process()
+                    st.subheader("AI提取信息成功")
 
 
 if __name__ == "__main__":

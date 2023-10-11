@@ -9,6 +9,9 @@ from bs4 import BeautifulSoup
 import sys
 import pathlib
 from tqdm import tqdm
+import warnings
+
+warnings.filterwarnings("ignore")
 
 sys.path.append(str(pathlib.Path(__file__).resolve().parent.parent))
 
@@ -113,7 +116,7 @@ class OpenLawSpider:
         contents: list = [],
         session: aiohttp.ClientSession = None,
         concurrent: int = 50,
-        ai = True,
+        ai_mode=True,
     ):
         self.base_url = "http://openlaw.cn"
 
@@ -270,7 +273,7 @@ class OpenLawSpider:
             except Exception as e:
                 content["标题"] = ""
                 print(f"标题爬取失败: {url}")
-                print(e)
+                # print(e)
             try:
                 content["日期"] = (
                     soup.find("li", class_="ht-kb-em-date")
@@ -279,8 +282,8 @@ class OpenLawSpider:
                 )  # 日期
             except Exception as e:
                 content["日期"] = ""
-                print(f"日期爬取失败: {url}")
-                print(e)
+                # print(f"日期爬取失败: {url}")
+                # print(e)
             try:
                 content["法院"] = (
                     soup.find("li", class_="ht-kb-em-author")
@@ -289,8 +292,8 @@ class OpenLawSpider:
                 )  # 法院
             except Exception as e:
                 content["法院"] = ""
-                print(f"法院爬取失败: {url}")
-                print(e)
+                # print(f"法院爬取失败: {url}")
+                # print(e)
             try:
                 content["案号"] = (
                     soup.find("li", class_="ht-kb-em-category")
@@ -299,60 +302,60 @@ class OpenLawSpider:
                 )  # 案号
             except Exception as e:
                 content["案号"] = ""
-                print(f"案号爬取失败: {url}")
-                print(e)
+                # print(f"案号爬取失败: {url}")
+                # print(e)
             try:
                 litigants = soup.find("div", id="Litigants").wrap
                 content["当事人"] = re.findall(r"<p>(.*?)</p>", str(litigants))  # 当事人
             except Exception as e:
                 content["当事人"] = ""
-                print(f"当事人爬取失败: {url}")
-                print(e)
+                # print(f"当事人爬取失败: {url}")
+                # print(e)
             try:
                 content["庭审程序说明"] = soup.find(
                     "div", id="Explain"
                 ).text.strip()  # 庭审程序说明
             except Exception as e:
                 content["庭审程序说明"] = ""
-                print(f"庭审程序说明爬取失败: {url}")
-                print(e)
+                # print(f"庭审程序说明爬取失败: {url}")
+                # print(e)
 
             try:
                 content["庭审过程"] = soup.find("div", id="Procedure").text.strip()  # 庭审过程
             except Exception as e:
                 content["庭审过程"] = ""
-                print(f"庭审过程爬取失败: {url}")
-                print(e)
+                # print(f"庭审过程爬取失败: {url}")
+                # print(e)
             try:
                 content["查明事实"] = soup.find("div", id="Facts").text.strip()  # 查明事实
             except Exception as e:  # 查明事实
                 content["查明事实"] = ""
-                print(f"查明事实爬取失败: {url}")
-                print(e)
+                # print(f"查明事实爬取失败: {url}")
+                # print(e)
             try:
                 content["法院意见"] = soup.find("div", id="Opinion").text.strip()  # 法院意见
             except Exception as e:
                 content["法院意见"] = ""
-                print(f"法院意见爬取失败: {url}")
-                print(e)
+                # print(f"法院意见爬取失败: {url}")
+                # print(e)
             try:
                 content["判决结果"] = soup.find("div", id="Verdict").text.strip()  # 判决结果
             except Exception as e:
                 content["判决结果"] = ""
-                print(f"判决结果爬取失败: {url}")
-                print(e)
+                # print(f"判决结果爬取失败: {url}")
+                # print(e)
             try:
                 content["庭后告知"] = soup.find("div", id="Inform").text.strip()  # 庭后告知
             except Exception as e:  # 庭后告知
                 content["庭后告知"] = ""
-                print(f"庭后告知爬取失败: {url}")
-                print(e)
+                # print(f"庭后告知爬取失败: {url}")
+                # print(e)
             try:
                 content["结尾"] = soup.find("div", id="Ending").text.strip()  # 结尾
             except Exception as e:
                 content["结尾"] = ""
-                print(f"结尾爬取失败: {url}")
-                print(e)
+                # print(f"结尾爬取失败: {url}")
+                # print(e)
 
             try:
                 info = (
@@ -366,11 +369,19 @@ class OpenLawSpider:
 
             if info:
                 try:
-                    content["类型"] = re.findall(r"类型：(.*)\n", info)[0]
+                    content["类型"] = (
+                        re.findall(r"类型：(.*)\n", info)[0]
+                        if self.doc_type == ""
+                        else self.doc_type
+                    )
                 except Exception as e:
                     content["类型"] = ""
                 try:
-                    content["程序"] = re.findall(r"程序：(.*)\n", info)[0]
+                    content["程序"] = (
+                        re.findall(r"程序：(.*)\n", info)[0]
+                        if self.procedure_type == ""
+                        else self.procedure_type
+                    )
                 except Exception as e:
                     content["程序"] = ""
                 try:
@@ -385,6 +396,12 @@ class OpenLawSpider:
                     content["案由"] = re.findall(r"案由：(.*)\n", info)[0]
                 except Exception as e:
                     content["案由"] = ""
+            else:
+                content["类型"] = ""
+                content["程序"] = ""
+                content["判决结果"] = ""
+                content["涉诉机关类型"] = ""
+                content["案由"] = ""
             try:
                 content["标签"] = (
                     re.findall('<a href="[^"]+" rel="tag">(.*?)</a>', text)
@@ -393,8 +410,8 @@ class OpenLawSpider:
                 )
             except Exception as e:
                 content["tags"] = ""
-                print(f"标签爬取失败: {url}")
-                print(e)
+                # print(f"标签爬取失败: {url}")
+                # print(e)
 
             self.contents.append(content)
 
@@ -511,39 +528,55 @@ class OpenLawSpider:
         )
 
         return analysis
-    
+
+    async def __ask_gpt(self, queue: asyncio.Queue):
+        default_extraxtion_json = {
+            "原告起诉的事实与理由": "",
+            "原告起诉的法律依据": [],
+            "原告起诉的诉讼请求": "",
+            "被告辩称的事实与理由": "",
+            "被告辩称的法律依据": [],
+            "法院认定和查明的事实": "",
+            "法院的判决的法律依据": [],
+            "法院的判决结果": "",
+        }
+        while not queue.empty():
+            content = await queue.get()
+            print(f"======目前正在处理 [{content['标题']}]======")
+            if not content["庭审过程"]:
+                content.update(default_extraxtion_json)
+                print(f"======✅{content['标题']} 没有庭审过程======")
+                continue
+            chain = get_conversation_chain(
+                model_name="gpt-3.5-turbo-16k-0613", prompt=LAW_RESULT_TEMPLATE
+            )
+            try:
+                extraxtion = chain.predict(
+                    explain=content["庭审程序说明"],
+                    procedure=content["庭审过程"],
+                    facts=content["查明事实"],
+                    opinion=content["法院意见"],
+                )
+                extraxtion_json = json.loads(extraxtion)
+                content.update(extraxtion_json)
+            except Exception as e:
+                extraxtion_json = default_extraxtion_json
+            content.update(extraxtion_json)
+            print(f"======✅{content['标题']} AI处理完成======")
+
     async def ai_process(self):
         if not self.contents:
             return
-        print("======开始AI处理======")
-        chain = get_conversation_chain(model_name="gpt-3.5-turbo-16k-0613", prompt=LAW_RESULT_TEMPLATE)
-        for content in tqdm(self.contents):
-            try:
-                extraxtion = chain.predict(
-                    explain = content["庭审程序说明"],
-                    procedure = content["庭审过程"],
-                    facts = content["查明事实"],
-                    opinion = content["法院意见"],
-                )
-                try:
-                    extraxtion_json = json.loads(extraxtion)
-                    content.update(extraxtion_json)
-                except Exception as e:
-                    extraxtion_json = {
-                        "原告起诉的事实与理由": "",
-                        "原告起诉的法律依据": [],
-                        "原告起诉的诉讼请求": "",
-                        "被告辩称的事实与理由": "",
-                        "被告辩称的法律依据": [],
-                        "法院认定和查明的事实": "",
-                        "法院的判决的法律依据": [],
-                        "法院的判决结果": ""
-                        }
-            except Exception as e:
-                continue
-            
-            print(content)
-
+        print("======开始AI处理====")
+        queue = asyncio.Queue()
+        for content in self.contents:
+            await queue.put(content)
+        tasks = []
+        temp_concurrent = self.concurrent // 2
+        for i in range(temp_concurrent):
+            tasks.append(self.__ask_gpt(queue))
+        await asyncio.gather(*tasks)
+        print("======🤖✅AI处理完成======")
 
     @property
     def df(self):
