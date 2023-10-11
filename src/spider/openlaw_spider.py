@@ -5,10 +5,15 @@ import pandas as pd
 import asyncio
 import aiohttp
 import os
+from bs4 import BeautifulSoup
 import sys
 import pathlib
+from tqdm import tqdm
+
+sys.path.append(str(pathlib.Path(__file__).resolve().parent.parent))
 
 from ..utils import create_dir
+from ..chat_model import get_conversation_chain, LAW_RESULT_TEMPLATE
 
 
 DOC_TYPE_MAP = {
@@ -62,7 +67,7 @@ LITIGATION_TYPE_MAP = {
 }
 
 ZONE_MAP = {
-    "":"",
+    "": "",
     "北京市": "北京市",
     "天津市": "天津市",
     "河北省": "河北省",
@@ -99,6 +104,7 @@ ZONE_MAP = {
     "澳门特别行政区": "澳门特别行政区",
 }
 
+
 class OpenLawSpider:
     def __init__(
         self,
@@ -106,7 +112,8 @@ class OpenLawSpider:
         links: dict = {},
         contents: list = [],
         session: aiohttp.ClientSession = None,
-        concurrent: int = 10,
+        concurrent: int = 50,
+        ai = True,
     ):
         self.base_url = "http://openlaw.cn"
 
@@ -122,7 +129,7 @@ class OpenLawSpider:
         self.judge_result = JUDGE_RESULT_MAP[config["判决结果"]]
         self.judge_date_begin = config["判决开始时间"]
         self.judge_date_end = config["判决结束时间"]
-        self.strat_page = config["strat_page"]
+        self.start_page = config["start_page"]
         self.end_page = config["end_page"]
 
         self.headers = {
@@ -133,19 +140,23 @@ class OpenLawSpider:
         self.contents = contents
         self.session = session
         self.concurrent = concurrent
-        self.base_dir = f'./data/{config["关键词"]}_{config["案件类型"]}_{config["文书类型"]}_{config["法院（地区）"]}_{config["审判程序"]}_{config["法院层级"]}_{config["判决结果"]}_{config["判决开始时间"]}_{config["判决结束时间"]}'
-        create_dir(self.base_dir)
+        self.__base_dir = f'./data/{config["关键词"]}_{config["案件类型"]}_{config["文书类型"]}_{config["法院（地区）"]}_{config["审判程序"]}_{config["法院层级"]}_{config["判决结果"]}_{config["判决开始时间"]}_{config["判决结束时间"]}'
+        create_dir(self.__base_dir)
 
     async def get_url(
         self, target_page_queue: asyncio.Queue, session: aiohttp.ClientSession
     ) -> list:
         while not target_page_queue.empty():
-            page = await target_page_queue.get()
-            keyword_ = requests.utils.quote(self.keyword)
-            url = f"{self.base_url}/search/judgement/advanced?showResults=true&keyword={keyword_}&causeId=&caseNo=&litigationType={self.litigation_type}&docType={self.doc_type}&litigant=&plaintiff=&defendant=&thirdParty=&lawyerId=&lawFirmId=&legals=&courtId=&judgeId=&clerk=&judgeDateYear=&judgeDateBegin={self.judge_date_begin}&judgeDateEnd={self.judge_date_end}&zone={self.zone}&procedureType={self.procedure_type}&lawId=&lawSearch=&courtLevel={self.court_level}&judgeResult={self.judge_result}&wordCount=&page={page}"
-            print(f"\n- 正在爬取第{page}页: {url}")
-            async with session.get(url, headers=self.headers) as response:
-                text = await response.text()
+            try:
+                page = await target_page_queue.get()
+                keyword_ = requests.utils.quote(self.keyword)
+                url = f"{self.base_url}/search/judgement/advanced?showResults=true&keyword={keyword_}&causeId=&caseNo=&litigationType={self.litigation_type}&docType={self.doc_type}&litigant=&plaintiff=&defendant=&thirdParty=&lawyerId=&lawFirmId=&legals=&courtId=&judgeId=&clerk=&judgeDateYear=&judgeDateBegin={self.judge_date_begin}&judgeDateEnd={self.judge_date_end}&zone={self.zone}&procedureType={self.procedure_type}&lawId=&lawSearch=&courtLevel={self.court_level}&judgeResult={self.judge_result}&wordCount=&page={page}"
+                print(f"\n- 正在爬取第{page}页: {url}")
+                async with session.get(url, headers=self.headers) as response:
+                    text = await response.text()
+            except Exception as e:
+                await target_page_queue.put(page)
+                raise e
             # 把keyword中文转换成url编码
             # 1. 创建正则表达式对象
             pattern = re.compile(r"/judgement/[0-9a-z]*\?keyword=" + keyword_)
@@ -157,13 +168,13 @@ class OpenLawSpider:
 
     async def crawl_links(self) -> bool:
         # 错误处理
-        if self.strat_page > self.end_page:
-            print(f"起始页{self.strat_page}大于结束页{self.end_page}!!!")
+        if self.start_page > self.end_page:
+            print(f"起始页{self.start_page}大于结束页{self.end_page}!!!")
             return False
         links = {}
-        file_name = self.base_dir + "/links.json"
+        file_name = self.__base_dir + "/links.json"
         str_pages = list(
-            str(i) for i in range(self.strat_page, self.end_page + 1)
+            str(i) for i in range(self.start_page, self.end_page + 1)
         )  # ["1", "2", "3", "4", "5", ...]
         target_pages = str_pages.copy()  # ["1", "2", "3", "4", "5", ...]
         # 情况: 链接已经爬取过了
@@ -190,9 +201,20 @@ class OpenLawSpider:
         print(f"======开始爬取链接======")
 
         tasks = []
-        for i in range(self.concurrent):
-            tasks.append(self.get_url(target_page_queue, self.session))
-        await asyncio.gather(*tasks)
+        temp_concurrent = self.concurrent
+        while (not target_page_queue.empty()) and (temp_concurrent > 0):
+            try:
+                for i in range(temp_concurrent):
+                    tasks.append(self.get_url(target_page_queue, self.session))
+                await asyncio.gather(*tasks)
+            # [Errno 54] Connection reset by peer
+            except Exception as e:
+                print(e)
+                print(f"并发数量超过最大值太多, 减少并发数量[{temp_concurrent} -> {temp_concurrent//2}]")
+                temp_concurrent = temp_concurrent // 2
+
+            asyncio.sleep(0.1)
+
         print(f"======链接爬取完结束=====")
 
         if self.links is None or len(self.links.keys()) == 0:
@@ -229,63 +251,157 @@ class OpenLawSpider:
         self, url_queue: asyncio.Queue, session: aiohttp.ClientSession
     ) -> None:
         while not url_queue.empty():
-            content = {}
-            url = await url_queue.get()
-            print(f"\n- 正在爬取: {url}")
-            async with session.get(url, headers=self.headers) as response:
-                text = await response.text()
-            content["url"] = url
-            content["title"] = self.filter_text(
-                re.findall('<h2 class="entry-title">(.*)</h2>', text)
-            )
-            content["case_number"] = self.filter_text(
-                re.findall('<li class="clearfix ht-kb-pf-standard">案号：(.*)</li>', text)
-            )
-            content["court"] = self.filter_text(
-                re.findall('<li class="clearfix ht-kb-pf-standard">法院：(.*)</li>', text)
-            )
-            content["data"] = self.filter_text(
-                re.findall('<li class="clearfix ht-kb-pf-standard">时间：(.*)</li>', text)
-            )
-            content["cause"] = self.filter_text(
-                re.findall('<li class="clearfix ht-kb-pf-standard">案由：(.*)</li>', text)
-            )
-            content["type"] = self.filter_text(
-                re.findall('<li class="clearfix ht-kb-pf-standard">类型：(.*)</li>', text)
-            )
-            content["procedure"] = self.filter_text(
-                re.findall('<li class="clearfix ht-kb-pf-standard">程序：(.*)</li>', text)
-            )
-            content["procedure_explain"] = self.filter_text(
-                re.findall(
-                    '<div class="part" id="Explain">\s*<!--.*?-->\s*<p>(.*?)<\/p>\s*<\/div>',
-                    text,
-                )
-            )
-            content["tags"] = (
-                re.findall('<a href="[^"]+" rel="tag">(.*?)</a>', text)
-                if re.findall('<a href="[^"]+" rel="tag">(.*?)</a>', text)
-                else ""
-            )
-            content["opinion"] = self.filter_text(
-                re.findall(
-                    '<div class="part" id="Opinion">\s*<!--.*?-->\s*<p>(.*?)<\/p>\s*<\/div>',
-                    text,
-                )
-            )
-            content["verdict"] = self.filter_text(
-                re.findall(
-                    '<div class="part" id="Verdict">\s*<!--.*?-->\s*<p>(.*?)<\/p>\s*<\/div>',
-                    text,
-                )
-            )
-            self.contents.append(content)
+            try:
+                content = {}
+                url = await url_queue.get()
+                print(f"\n- 正在爬取: {url}")
+                async with session.get(url, headers=self.headers) as response:
+                    text = await response.text()
+            except Exception as e:
+                await url_queue.put(url)
+                raise e
+            if text is None or len(text) == 0:
+                print(f"爬取失败: {url}")
+                continue
+            soup = BeautifulSoup(text, "html.parser")
+            content["链接"] = url
+            try:
+                content["标题"] = soup.find("h2", class_="entry-title").text.strip()  # 标题
+            except Exception as e:
+                content["标题"] = ""
+                print(f"标题爬取失败: {url}")
+                print(e)
+            try:
+                content["日期"] = (
+                    soup.find("li", class_="ht-kb-em-date")
+                    .text.strip()
+                    .split("日期：")[-1]
+                )  # 日期
+            except Exception as e:
+                content["日期"] = ""
+                print(f"日期爬取失败: {url}")
+                print(e)
+            try:
+                content["法院"] = (
+                    soup.find("li", class_="ht-kb-em-author")
+                    .text.strip()
+                    .split("法院：")[-1]
+                )  # 法院
+            except Exception as e:
+                content["法院"] = ""
+                print(f"法院爬取失败: {url}")
+                print(e)
+            try:
+                content["案号"] = (
+                    soup.find("li", class_="ht-kb-em-category")
+                    .text.strip()
+                    .split("案号：")[-1]
+                )  # 案号
+            except Exception as e:
+                content["案号"] = ""
+                print(f"案号爬取失败: {url}")
+                print(e)
+            try:
+                litigants = soup.find("div", id="Litigants").wrap
+                content["当事人"] = re.findall(r"<p>(.*?)</p>", str(litigants))  # 当事人
+            except Exception as e:
+                content["当事人"] = ""
+                print(f"当事人爬取失败: {url}")
+                print(e)
+            try:
+                content["庭审程序说明"] = soup.find(
+                    "div", id="Explain"
+                ).text.strip()  # 庭审程序说明
+            except Exception as e:
+                content["庭审程序说明"] = ""
+                print(f"庭审程序说明爬取失败: {url}")
+                print(e)
 
+            try:
+                content["庭审过程"] = soup.find("div", id="Procedure").text.strip()  # 庭审过程
+            except Exception as e:
+                content["庭审过程"] = ""
+                print(f"庭审过程爬取失败: {url}")
+                print(e)
+            try:
+                content["查明事实"] = soup.find("div", id="Facts").text.strip()  # 查明事实
+            except Exception as e:  # 查明事实
+                content["查明事实"] = ""
+                print(f"查明事实爬取失败: {url}")
+                print(e)
+            try:
+                content["法院意见"] = soup.find("div", id="Opinion").text.strip()  # 法院意见
+            except Exception as e:
+                content["法院意见"] = ""
+                print(f"法院意见爬取失败: {url}")
+                print(e)
+            try:
+                content["判决结果"] = soup.find("div", id="Verdict").text.strip()  # 判决结果
+            except Exception as e:
+                content["判决结果"] = ""
+                print(f"判决结果爬取失败: {url}")
+                print(e)
+            try:
+                content["庭后告知"] = soup.find("div", id="Inform").text.strip()  # 庭后告知
+            except Exception as e:  # 庭后告知
+                content["庭后告知"] = ""
+                print(f"庭后告知爬取失败: {url}")
+                print(e)
+            try:
+                content["结尾"] = soup.find("div", id="Ending").text.strip()  # 结尾
+            except Exception as e:
+                content["结尾"] = ""
+                print(f"结尾爬取失败: {url}")
+                print(e)
+
+            try:
+                info = (
+                    soup.find(
+                        "section", class_="widget HT_KB_Authors_Widget clearfix"
+                    ).text.strip()
+                    + "\n"
+                )  # 案件信息
+            except Exception as e:
+                info = ""
+
+            if info:
+                try:
+                    content["类型"] = re.findall(r"类型：(.*)\n", info)[0]
+                except Exception as e:
+                    content["类型"] = ""
+                try:
+                    content["程序"] = re.findall(r"程序：(.*)\n", info)[0]
+                except Exception as e:
+                    content["程序"] = ""
+                try:
+                    content["判决结果"] = re.findall(r"判决结果：(.*)\n", info)[0]
+                except Exception as e:
+                    content["判决结果"] = ""
+                try:
+                    content["涉诉机关类型"] = re.findall(r"涉诉机关类型：(.*)\n", info)[0]
+                except Exception as e:
+                    content["涉诉机关类型"] = ""
+                try:
+                    content["案由"] = re.findall(r"案由：(.*)\n", info)[0]
+                except Exception as e:
+                    content["案由"] = ""
+            try:
+                content["标签"] = (
+                    re.findall('<a href="[^"]+" rel="tag">(.*?)</a>', text)
+                    if re.findall('<a href="[^"]+" rel="tag">(.*?)</a>', text)
+                    else ""
+                )
+            except Exception as e:
+                content["tags"] = ""
+                print(f"标签爬取失败: {url}")
+                print(e)
+
+            self.contents.append(content)
 
     async def crawl_contents(self):
         contents = []
         urls = []  # 已经爬取过的链接
-        file_name = self.base_dir + "/contents.json"
+        file_name = self.__base_dir + "/contents.json"
         target_urls = []
         for page, links in self.links.items():
             target_urls.extend(links)
@@ -295,10 +411,10 @@ class OpenLawSpider:
             contents = json.load(open(file_name, "r", encoding="utf-8"))
             self.contents = contents
             # 已经爬取过的链接
-            urls = [content["url"] for content in self.contents]
+            urls = [content["链接"] for content in self.contents]
             # 去除已爬取过的内容了 链接不属于self.links的内容
             for row in self.contents:
-                if row["url"] not in target_urls:
+                if row["链接"] not in target_urls:
                     self.contents.remove(row)
 
         # 创建队列
@@ -308,11 +424,18 @@ class OpenLawSpider:
                 await url_queue.put(url)
 
         print(f"======开始创建爬取任务======")
+        temp_concurrent = self.concurrent
         tasks = []
-        for i in range(self.concurrent):
-            tasks.append(self.add_content(url_queue, self.session))
-
-        await asyncio.gather(*tasks)
+        while (not url_queue.empty()) and (temp_concurrent > 0):
+            try:
+                for i in range(temp_concurrent):
+                    tasks.append(self.add_content(url_queue, self.session))
+                await asyncio.gather(*tasks)
+            except Exception as e:
+                print(e)
+                print(f"并发数量超过最大值太多, 减少并发数量[{temp_concurrent} -> {temp_concurrent//2}]")
+                temp_concurrent = temp_concurrent // 2
+            asyncio.sleep(0.1)
 
         print(f"======内容爬取完成======")
         # 保存
@@ -322,26 +445,114 @@ class OpenLawSpider:
 
     def save_to_excel(self):
         df = pd.DataFrame(self.contents)
-        # 修改标题
-        df.rename(
-            columns={
-                "url": "链接",
-                "title": "标题",
-                "case_number": "案号",
-                "court": "法院",
-                "data": "日期",
-                "cause": "案由",
-                "type": "类型",
-                "procedure": "程序",
-                "procedure_explain": "程序说明",
-                "tags": "标签",
-                "opinion": "观点",
-                "verdict": "判决",
-            },
-            inplace=True,
-        )
         # 保存到excel
-        file_name = self.base_dir + "/contents.xlsx"
+        file_name = self.__base_dir + "/contents.xlsx"
 
         df.to_excel(file_name, index=False)
         print(f"======{file_name}保存完成======")
+
+    def basic_analysis(self):
+        """
+        分析：
+        一审数量、二审数量、再审数量、复核数量、刑罚变更数量、其他数量
+        裁定书数量、判决书数量、调解书数量、决定书数量、令数量、通知书数量、其他数量
+        每个案由的数量
+        每个标签的数量
+        """
+        if not self.contents:
+            return {}
+        analysis = {}
+        # 一审数量、二审数量、再审数量、复核数量、刑罚变更数量、其他数量
+        analysis["审判程序"] = {}
+        for procedure_type in PROCEDURE_TYPE_MAP.keys():
+            if procedure_type:
+                analysis["审判程序"][procedure_type] = 0
+        for content in self.contents:
+            procedure_type = content["程序"]
+            analysis["审判程序"][procedure_type] += 1
+        # 裁定书数量、判决书数量、调解书数量、决定书数量、令数量、通知书数量、其他数量
+        analysis["文书类型"] = {}
+        for doc_type in DOC_TYPE_MAP.keys():
+            if doc_type:
+                analysis["文书类型"][doc_type] = 0
+        for content in self.contents:
+            doc_type = content["类型"]
+            analysis["文书类型"][doc_type] += 1
+        # 案由
+        analysis["案由"] = {}
+        for content in self.contents:
+            case = content["案由"]
+            if case:
+                if case not in analysis["案由"]:
+                    analysis["案由"][case] = 0
+                analysis["案由"][case] += 1
+        # 标签
+        analysis["标签"] = {}
+        for content in self.contents:
+            tags = content["标签"]
+            for tag in tags:
+                if tag:
+                    if tag not in analysis["标签"]:
+                        analysis["标签"][tag] = 0
+                    analysis["标签"][tag] += 1
+
+        # 排序
+        analysis["审判程序"] = dict(
+            sorted(analysis["审判程序"].items(), key=lambda item: item[1], reverse=True)
+        )
+        analysis["文书类型"] = dict(
+            sorted(analysis["文书类型"].items(), key=lambda item: item[1], reverse=True)
+        )
+        analysis["案由"] = dict(
+            sorted(analysis["案由"].items(), key=lambda item: item[1], reverse=True)
+        )
+        analysis["标签"] = dict(
+            sorted(analysis["标签"].items(), key=lambda item: item[1], reverse=True)
+        )
+
+        return analysis
+    
+    async def ai_process(self):
+        if not self.contents:
+            return
+        print("======开始AI处理======")
+        chain = get_conversation_chain(model_name="gpt-3.5-turbo-16k-0613", prompt=LAW_RESULT_TEMPLATE)
+        for content in tqdm(self.contents):
+            try:
+                extraxtion = chain.predict(
+                    explain = content["庭审程序说明"],
+                    procedure = content["庭审过程"],
+                    facts = content["查明事实"],
+                    opinion = content["法院意见"],
+                )
+                try:
+                    extraxtion_json = json.loads(extraxtion)
+                    content.update(extraxtion_json)
+                except Exception as e:
+                    extraxtion_json = {
+                        "原告起诉的事实与理由": "",
+                        "原告起诉的法律依据": [],
+                        "原告起诉的诉讼请求": "",
+                        "被告辩称的事实与理由": "",
+                        "被告辩称的法律依据": [],
+                        "法院认定和查明的事实": "",
+                        "法院的判决的法律依据": [],
+                        "法院的判决结果": ""
+                        }
+            except Exception as e:
+                continue
+            
+            print(content)
+
+
+    @property
+    def df(self):
+        return pd.DataFrame(self.contents)
+
+    @property
+    def base_dir(self):
+        return self.__base_dir
+
+    @property
+    def analysis(self):
+        return self.basic_analysis()

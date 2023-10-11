@@ -10,7 +10,7 @@
 - cookie: 从浏览器中获取的cookie，会动态的变化，如果失效了需要重新获取
 - search_keyword: 在`openlaw_spider.py`搜索的关键词
 - analysis_keyword: 在`data_analysis.py`中分析的关键词
-- strat_page: 开始爬取的页数
+- start_page: 开始爬取的页数
 - end_page: 结束爬取的页数
 
 # 运行项目

@@ -1,10 +1,13 @@
 aiohttp==3.8.3
+beautifulsoup4==4.11.1
 codetiming==1.4.0
 matplotlib==3.8.0
 pandas==1.5.2
+pyxlsb==1.0.10
 PyYAML==6.0
 PyYAML==6.0.1
 Requests==2.31.0
 seaborn==0.13.0
-tqdm==4.64.1
+streamlit==1.27.1
 wordcloud==1.9.2
+XlsxWriter==3.1.7

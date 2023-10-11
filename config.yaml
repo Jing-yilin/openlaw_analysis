@@ -11,5 +11,5 @@ cookie: "SESSION=NTk4ZWFkZTktMzkwNy00NjZmLWIxNGMtOGM0MDRlOTA2ZDYx"
 判决结果: "" # 未知/完全支持/部分支持/不支持/撤销/其他
 判决开始时间: "" # 2023-10-10
 判决结束时间: "" # 2023-10-11
-strat_page: 1
+start_page: 1
 end_page: 10
