@@ -10,7 +10,11 @@
 在terminal中运行一下命令，安装依赖
 ```bash
 pip install -r requirements.txt
+npm install node-jsencrypt
+npm install crypto-js
 ```
+
+## 2. 运行项目
 
 ```bash
 streamlit run app.py
