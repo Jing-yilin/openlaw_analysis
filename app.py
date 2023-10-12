@@ -28,8 +28,6 @@ if "password" not in st.session_state:
 
 def set_session_state_step(i):
     st.session_state.step = i
-    print(f"[STEP-CHANGE] {st.session_state.step}")
-
 
 def set_session_state_login(status):
     st.session_state.login = status
@@ -66,12 +64,12 @@ async def main():
         if openai_sk and openai_sk.startswith("sk-"):
             os.environ["OPENAI_API_KEY"] = openai_sk
         if not st.session_state.login:
-            username = st.text_input("用户名", placeholder="请输入openlaw的用户名", value="")
+            username = st.text_input("用户名", placeholder="请输入openlaw的用户名", value=None)
             password = st.text_input(
                 "密码",
                 type="password",
                 placeholder="请输入openlaw的密码",
-                value="",
+                value=None,
             )
             if username and password:
                 st.button(
@@ -210,6 +208,9 @@ async def main():
                     with st.spinner("正在AI提取信息，请耐心等待..."):
                         await spider.ai_process()
                     st.subheader("AI提取信息成功")
+
+            else:
+                st.error("😭没有找到任何符合条件的链接，请更新参数！")
 
 
 if __name__ == "__main__":

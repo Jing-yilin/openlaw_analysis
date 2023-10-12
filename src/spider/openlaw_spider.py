@@ -222,7 +222,7 @@ class OpenLawSpider:
         print(f"======链接爬取完结束=====")
 
         if self.links is None or len(self.links.keys()) == 0:
-            print(f"没有爬取到链接,请更新cookie!!!")
+            print(f"没有爬取到任何符合条件的链接，请更改搜索条件！")
             return False
         else:
             with open(file_name, "w", encoding="utf-8") as f:
@@ -487,7 +487,13 @@ class OpenLawSpider:
                 analysis["审判程序"][procedure_type] = 0
         for content in self.contents:
             procedure_type = content["程序"]
-            analysis["审判程序"][procedure_type] += 1
+            if procedure_type in PROCEDURE_TYPE_MAP.keys():
+                analysis["审判程序"][procedure_type] += 1
+            elif procedure_type in PROCEDURE_TYPE_MAP.values():
+                idx = list(PROCEDURE_TYPE_MAP.values()).index(procedure_type)
+                analysis["审判程序"][list(PROCEDURE_TYPE_MAP.keys())[idx]] += 1
+            else:
+                continue
         # 裁定书数量、判决书数量、调解书数量、决定书数量、令数量、通知书数量、其他数量
         analysis["文书类型"] = {}
         for doc_type in DOC_TYPE_MAP.keys():
@@ -495,7 +501,13 @@ class OpenLawSpider:
                 analysis["文书类型"][doc_type] = 0
         for content in self.contents:
             doc_type = content["类型"]
-            analysis["文书类型"][doc_type] += 1
+            if doc_type in DOC_TYPE_MAP.keys():
+                analysis["文书类型"][doc_type] += 1
+            elif doc_type in DOC_TYPE_MAP.values():
+                idx = list(DOC_TYPE_MAP.values()).index(doc_type)
+                analysis["文书类型"][list(DOC_TYPE_MAP.keys())[idx]] += 1
+            else:
+                continue
         # 案由
         analysis["案由"] = {}
         for content in self.contents:
