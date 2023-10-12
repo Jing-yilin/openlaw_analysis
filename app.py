@@ -2,12 +2,11 @@ import streamlit as st
 import asyncio
 import aiohttp
 from codetiming import Timer
+import os
 
-from src.utils import set_env, to_excel
+from src.utils import to_excel
 from datetime import date, datetime
-from src.spider import OpenLawSpider, login_openlaw
-from src.analysis import Analyzer
-from src.utils import read_config
+from src.spider import OpenLawSpider, login_openlaw, check_login_status
 from src.spider.openlaw_spider import (
     DOC_TYPE_MAP,
     PROCEDURE_TYPE_MAP,
@@ -17,40 +16,138 @@ from src.spider.openlaw_spider import (
     ZONE_MAP,
 )
 
-set_env()
+if "step" not in st.session_state:
+    st.session_state.step = 0
+if "login" not in st.session_state:
+    st.session_state.login = False
+if "username" not in st.session_state:
+    st.session_state.username = ""
+if "password" not in st.session_state:
+    st.session_state.password = ""
+
 
 def set_session_state_step(i):
     st.session_state.step = i
+    print(f"[STEP-CHANGE] {st.session_state.step}")
+
+
+def set_session_state_login(status):
+    st.session_state.login = status
+
+
+def set_session_state_username(username):
+    st.session_state.username = username
+
+
+def set_session_state_password(password):
+    st.session_state.password = password
+
+
+def check_login_status_st(username, password):
+    if check_login_status(username, password):
+        set_session_state_login(True)
+        set_session_state_username(username)
+        set_session_state_password(password)
+        set_session_state_step(1)
+    else:
+        st.error("登录失败")
+        set_session_state_login(False)
+        set_session_state_step(0)
 
 
 async def main():
-    if "step" not in st.session_state:
-        st.session_state.step = 0
-
     config = {}
     if st.session_state.step >= 0:
         st.title("📖OpenLaw爬取助手")
         ai_mode = st.checkbox("AI模式")
-        openai_sk = st.text_input("OpenAI SK", type="password", disabled=not ai_mode)
-        username = st.text_input("用户名", placeholder="请输入openlaw的用户名", value="1154896650@qq.com")
-        password = st.text_input("密码", type="password", placeholder="请输入openlaw的密码", value="3.1415926Jj302")
-        config["关键词"] = st.text_input("关键词", placeholder="请输入关键词", value="房屋租赁")
-        config["案件类型"] = st.selectbox("案件类型", list(LITIGATION_TYPE_MAP.keys()))
-        config["法院（地区）"] = st.selectbox("法院（地区）", list(ZONE_MAP.keys()))
-        config["法院层级"] = st.selectbox("法院层级", list(COURT_LEVEL_MAP.keys()))
-        config["审判程序"] = st.selectbox("审判程序", list(PROCEDURE_TYPE_MAP.keys()))
-        config["文书类型"] = st.selectbox("文书类型", list(DOC_TYPE_MAP.keys()))
-        config["判决结果"] = st.selectbox("判决结果", list(JUDGE_RESULT_MAP.keys()))
-        
+        openai_sk = st.text_input(
+            "OpenAI SK", type="password", value="", disabled=not ai_mode
+        )
+        if openai_sk and openai_sk.startswith("sk-"):
+            os.environ["OPENAI_API_KEY"] = openai_sk
+        if not st.session_state.login:
+            username = st.text_input("用户名", placeholder="请输入openlaw的用户名", value="")
+            password = st.text_input(
+                "密码",
+                type="password",
+                placeholder="请输入openlaw的密码",
+                value="3.",
+            )
+            if username and password:
+                st.button(
+                    "检查登录状态",
+                    on_click=check_login_status_st,
+                    args=[username, password],
+                    use_container_width=True,
+                )
+            else:
+                st.warning("请输入用户名和密码")
+        else:
+            st.success(f"用户[{st.session_state.username}]已经登录啦~")
+
+    if st.session_state.step >= 1:
+        config["关键词"] = st.text_input(
+            "关键词",
+            placeholder="请输入关键词",
+            value="房屋租赁",
+            on_change=set_session_state_step,
+            args=(1,),
+        )
+        config["案件类型"] = st.selectbox(
+            "案件类型",
+            list(LITIGATION_TYPE_MAP.keys()),
+            on_change=set_session_state_step,
+            args=(1,),
+        )
+        config["法院（地区）"] = st.selectbox(
+            "法院（地区）", list(ZONE_MAP.keys()), on_change=set_session_state_step, args=(1,)
+        )
+        config["法院层级"] = st.selectbox(
+            "法院层级",
+            list(COURT_LEVEL_MAP.keys()),
+            on_change=set_session_state_step,
+            args=(1,),
+        )
+        config["审判程序"] = st.selectbox(
+            "审判程序",
+            list(PROCEDURE_TYPE_MAP.keys()),
+            on_change=set_session_state_step,
+            args=(1,),
+        )
+        config["文书类型"] = st.selectbox(
+            "文书类型",
+            list(DOC_TYPE_MAP.keys()),
+            on_change=set_session_state_step,
+            args=(1,),
+        )
+        config["判决结果"] = st.selectbox(
+            "判决结果",
+            list(JUDGE_RESULT_MAP.keys()),
+            on_change=set_session_state_step,
+            args=(1,),
+        )
+
         config[
             "user_agent"
         ] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
         start, end = st.columns(2)
         with start:
-            config["判决开始时间"] = st.date_input("判决开始时间", date(2011, 1, 1))
+            config["判决开始时间"] = st.date_input(
+                "判决开始时间", date(2011, 1, 1), on_change=set_session_state_step, args=(1,)
+            )
         with end:
-            config["判决结束时间"] = st.date_input("判决结束时间", datetime.now())
-        page_num = st.number_input("您希望至少有多少返回结果（一页20条结果）", 1, None, 100, 20)
+            config["判决结束时间"] = st.date_input(
+                "判决结束时间", datetime.now(), on_change=set_session_state_step, args=(1,)
+            )
+        page_num = st.number_input(
+            "您希望至少有多少返回结果（一页20条结果）",
+            1,
+            None,
+            100,
+            20,
+            on_change=set_session_state_step,
+            args=(1,),
+        )
         if page_num:
             config["start_page"] = 1
             config["end_page"] = (page_num - 1) // 20 + 1
@@ -58,16 +155,21 @@ async def main():
         st.button(
             "😀开始分析",
             on_click=set_session_state_step,
-            args=(1,),
+            args=(2,),
             use_container_width=True,
         )
-    if st.session_state.step >= 1:
+
+    if st.session_state.step >= 2:
         timer = Timer("timer", logger=None)
+        print("Timer started")
         timer.start()
         async with aiohttp.ClientSession() as session:
-            # 登录
             with st.spinner("正在登录..."):
-                config["cookie"] = await login_openlaw(username, password, session)
+                config["cookie"] = await login_openlaw(
+                    st.session_state.username, st.session_state.password, session
+                )
+                config["username"] = st.session_state.username
+                config["password"] = st.session_state.password
             # 数据爬取
             spider = OpenLawSpider(
                 config,
