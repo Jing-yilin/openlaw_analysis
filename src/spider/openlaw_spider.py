@@ -10,6 +10,7 @@ import sys
 import pathlib
 from tqdm import tqdm
 import warnings
+from tqdm.asyncio import tqdm_asyncio
 
 warnings.filterwarnings("ignore")
 
