@@ -71,7 +71,7 @@ async def main():
                 "密码",
                 type="password",
                 placeholder="请输入openlaw的密码",
-                value="3.",
+                value="",
             )
             if username and password:
                 st.button(
