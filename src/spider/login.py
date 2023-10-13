@@ -12,13 +12,19 @@ sys.path.append(str(pathlib.Path(__file__).parent.parent.absolute()))
 from utils import encrypt_js, create_dir
 
 
-async def check_login_status(
-    username: str, password: str,
+def check_login_status(
+    username: str,
+    password: str,
 ):
+    """
+    如果保存的cookie_session有效，则返回cookie_session
+    否则返回False
+    """
+    print(f"======正在检查用户 {username} 的登录状态======")
     if not username or not password:
         print("用户名或密码为空")
         return False
-    
+
     all_user_data_path = (
         str(pathlib.Path(__file__).parent.parent.parent.absolute())
         + "/data/all_user_data"
@@ -60,7 +66,7 @@ async def check_login_status(
                 print(f"[{resp.status_code} ERROR] 无法访问: {url}")
                 return False
             print(f"[200 OK] 成功访问: {url}")
-            return True
+            return cookie_session
         except:
             print("旧的session登录失败")
             return False
@@ -80,90 +86,91 @@ async def new_login_openlaw(
     user_data_file = all_user_data_path + "/" + username + ".yaml"
     create_dir(all_user_data_path)
 
-    # 1. 在登录页提交get请求
-    url = "http://openlaw.cn/login.jsp"
-    headers = {
-        "Host": "openlaw.cn",
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/118.0",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.5",
-        "Accept-Encoding": "gzip, deflate",
-        "Referer": "http://openlaw.cn/login.jsp",
-        "DNT": "1",
-        "Connection": "keep-alive",
-        "Upgrade-Insecure-Requests": "1",
-        "Sec-GPC": "1",
-        "Pragma": "no-cache",
-        "Cache-Control": "no-cache",
-    }
-    print(f"\n开始提交get请求至 {url}")
-    async with session.get(url, headers=headers) as resp:
-        if not resp.status == 200:
-            print(f"[{resp.status} ERROR] 无法访问: {url}")
-            return
-        print(f"[200 OK] 成功访问: {url}")
-        text = await resp.text()
-        csrf = re.findall(r'<input type="hidden" name="_csrf" value="(.*)"/>', text)[0]
-        cookie_session = resp.cookies.get("SESSION").value
-        print(f"SESSION = {cookie_session}")
-        # 加密
-        encrypted_password = encrypt_js(password)
+    try:
+        # 1. 在登录页提交get请求
+        url = "http://openlaw.cn/login.jsp"
+        headers = {
+            "Host": "openlaw.cn",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/118.0",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+            "Accept-Encoding": "gzip, deflate",
+            "Referer": "http://openlaw.cn/login.jsp",
+            "DNT": "1",
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+            "Sec-GPC": "1",
+            "Pragma": "no-cache",
+            "Cache-Control": "no-cache",
+        }
+        print(f"\n开始提交get请求至 {url}")
+        async with session.get(url, headers=headers) as resp:
+            if not resp.status == 200:
+                print(f"[{resp.status} ERROR] 无法访问: {url}")
+                return
+            print(f"[200 OK] 成功访问: {url}")
+            text = await resp.text()
+            csrf = re.findall(
+                r'<input type="hidden" name="_csrf" value="(.*)"/>', text
+            )[0]
+            cookie_session = resp.cookies.get("SESSION").value
+            print(f"SESSION = {cookie_session}")
+            # 加密
+            encrypted_password = encrypt_js(password)
 
-    # 2. 在登录页提交post请求
-    url = "http://openlaw.cn/login"
-    headers = {
-        "Host": "openlaw.cn",
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/118.0",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.5",
-        "Accept-Encoding": "gzip, deflate",
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Content-Length": "518",
-        "Origin": "http://openlaw.cn",
-        "DNT": "1",
-        "Connection": "keep-alive",
-        "Referer": "http://openlaw.cn/login.jsp",
-        "Cookie": f"SESSION={cookie_session}",
-        "Upgrade-Insecure-Requests": "1",
-        "Sec-GPC": "1",
-    }
-    data = {
-        "_csrf": csrf,
-        "username": username,
-        "password": encrypted_password,
-        "_spring_security_remember_me": "true",
-    }
-    print(f"\n开始提交post请求至{url}")
-    print(f"\nheaders = {headers}")
-    async with session.post(url, headers=headers, data=data) as resp:
-        if not resp.status == 200:
-            print(f"[{resp.status} ERROR] 无法访问: {url}")
-            return
-        print(f"[200 OK] 成功访问: {url}")
+        # 2. 在登录页提交post请求
+        url = "http://openlaw.cn/login"
+        headers = {
+            "Host": "openlaw.cn",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/118.0",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+            "Accept-Encoding": "gzip, deflate",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Content-Length": "518",
+            "Origin": "http://openlaw.cn",
+            "DNT": "1",
+            "Connection": "keep-alive",
+            "Referer": "http://openlaw.cn/login.jsp",
+            "Cookie": f"SESSION={cookie_session}",
+            "Upgrade-Insecure-Requests": "1",
+            "Sec-GPC": "1",
+        }
+        data = {
+            "_csrf": csrf,
+            "username": username,
+            "password": encrypted_password,
+            "_spring_security_remember_me": "true",
+        }
+        print(f"\n开始提交post请求至 {url}")
+        async with session.post(url, headers=headers, data=data) as resp:
+            if not resp.status == 200:
+                print(f"[{resp.status} ERROR] 无法访问: {url}")
+                return
+            print(f"[200 OK] 成功访问: {url}")
 
-    # 保存session到用户文件
-    with open(user_data_file, "w") as f:
-        yaml.dump({"cookie_session": cookie_session}, f)
+        # 保存session到用户文件
+        with open(user_data_file, "w") as f:
+            yaml.dump({"cookie_session": cookie_session}, f)
 
-    return "SESSION=" + cookie_session
+        return "SESSION=" + cookie_session
+
+    except:
+        print("登录失败")
+        return None
 
 
 async def login_openlaw(
     username: str, password: str, session: aiohttp.ClientSession
 ) -> str:
-    all_user_data_path = (
-        str(pathlib.Path(__file__).parent.parent.parent.absolute())
-        + "/data/all_user_data"
-    )
-    user_data_file = all_user_data_path + "/" + username + ".yaml"
+    """
+    如果登陆成功: cookie
+    如果登陆失败: 返回None
+    """
 
-    login_status = await check_login_status(username, password)
-    if login_status:
+    cookie_session = check_login_status(username, password)
+    if cookie_session:
         print("登录状态检查成功，无需重新登录")
-        with open(user_data_file, "r") as f:
-            user_data = yaml.load(f, Loader=yaml.FullLoader)
-            cookie_session = user_data["cookie_session"]
-            print(f"读取到旧的cookie_session: {cookie_session}")
         return "SESSION=" + cookie_session
     else:
         print("登录状态检查失败，开始重新登录")
