@@ -2,6 +2,7 @@ import streamlit as st
 import asyncio
 import aiohttp
 from codetiming import Timer
+import pandas as pd
 import os
 
 from src.utils import to_excel
@@ -40,17 +41,25 @@ def set_session_state_username(username):
 def set_session_state_password(password):
     st.session_state.password = password
 
-
-def check_login_status_st(username, password):
-    if check_login_status(username, password):
-        set_session_state_login(True)
-        set_session_state_username(username)
-        set_session_state_password(password)
-        set_session_state_step(1)
-    else:
-        st.error("登录失败")
-        set_session_state_login(False)
-        set_session_state_step(0)
+async def login_openlaw_st(username, password):
+    print("======正在登录======\n"
+          f"用户名: {username}\n"
+          f"密码: {len(password) * '*'}")
+    
+    # 创建session
+    async with aiohttp.ClientSession() as session:
+        if await login_openlaw(username, password, session):
+            print("✅账号已经登录！")
+            st.success("登录成功")
+            set_session_state_login(True)
+            set_session_state_username(username)
+            set_session_state_password(password)
+            set_session_state_step(1)
+        else:
+            print("❎账号登录失败!")
+            st.error("登录失败")
+            set_session_state_login(False)
+            set_session_state_step(0)
 
 
 async def main():
@@ -72,12 +81,11 @@ async def main():
                 value=None,
             )
             if username and password:
-                st.button(
-                    "检查登录状态",
-                    on_click=check_login_status_st,
-                    args=[username, password],
+                if st.button(
+                    "登录",
                     use_container_width=True,
-                )
+                ):
+                    await login_openlaw_st(username, password)
             else:
                 st.warning("请输入用户名和密码")
         else:
@@ -187,13 +195,18 @@ async def main():
                     await spider.crawl_contents()
                 timer.stop()
                 st.success(f"😀爬取完成，耗时{timer.last:.2f}秒")
-                st.subheader("基础分析结果")
-                for key, value in spider.analysis.items():
-                    st.markdown(f"**{key}**")
-                    if key == "标签":
-                        st.json(value, expanded=False)
-                    else:
-                        st.json(value, expanded=True)
+
+                # side显示基础的统计结果
+                with st.sidebar:
+                    st.subheader("基础分析结果")
+                    for key, value in spider.analysis.items():
+                        st.markdown(f"**{key}**")
+
+                        df = pd.DataFrame.from_dict(value, orient="index")
+                        df.columns = ["数量"]
+                        df.index.name = key
+                        df.sort_values(by="数量", ascending=False, inplace=True)
+                        st.dataframe(df, use_container_width=True)
 
                 df_xlsx = to_excel(spider.df)
                 file_name = spider.base_dir + ".xlsx"
@@ -201,7 +214,10 @@ async def main():
                 st.header(f"爬取内容成功[共{len(spider.contents)}条]")
                 for content in spider.contents:
                     st.markdown(f"**{content['标题']}**")
-                    st.json(content, expanded=False)
+                    df = pd.DataFrame.from_dict(content, orient="index")
+                    df.index.name = "字段"
+                    st.dataframe(df, use_container_width=True)
+
 
                 # ai提取
                 if ai_mode:
