@@ -11,6 +11,7 @@ import pathlib
 from tqdm import tqdm
 import warnings
 from tqdm.asyncio import tqdm_asyncio
+from logging import Logger
 
 warnings.filterwarnings("ignore")
 
@@ -118,6 +119,7 @@ class OpenLawSpider:
         session: aiohttp.ClientSession = None,
         concurrent: int = 50,
         ai_mode=True,
+        logger: Logger = None,
     ):
         self.base_url = "http://openlaw.cn"
 
@@ -133,8 +135,9 @@ class OpenLawSpider:
         self.judge_result = JUDGE_RESULT_MAP[config["判决结果"]]
         self.judge_date_begin = config["判决开始时间"]
         self.judge_date_end = config["判决结束时间"]
-        self.start_page = config["start_page"]
-        self.end_page = config["end_page"]
+        self.num = config["数量"]
+        self.start_page = 1
+        self.end_page = (self.num - 1) // 10 + 1
 
         self.headers = {
             "User-Agent": self.user_agent,
@@ -146,6 +149,7 @@ class OpenLawSpider:
         self.concurrent = concurrent
         self.__base_dir = f'./data/{config["关键词"]}_{config["案件类型"]}_{config["文书类型"]}_{config["法院（地区）"]}_{config["审判程序"]}_{config["法院层级"]}_{config["判决结果"]}_{config["判决开始时间"]}_{config["判决结束时间"]}'
         create_dir(self.__base_dir)
+        self.logger = logger
 
     async def get_url(
         self, target_page_queue: asyncio.Queue, session: aiohttp.ClientSession
@@ -155,10 +159,14 @@ class OpenLawSpider:
                 page = await target_page_queue.get()
                 keyword_ = requests.utils.quote(self.keyword)
                 url = f"{self.base_url}/search/judgement/advanced?showResults=true&keyword={keyword_}&causeId=&caseNo=&litigationType={self.litigation_type}&docType={self.doc_type}&litigant=&plaintiff=&defendant=&thirdParty=&lawyerId=&lawFirmId=&legals=&courtId=&judgeId=&clerk=&judgeDateYear=&judgeDateBegin={self.judge_date_begin}&judgeDateEnd={self.judge_date_end}&zone={self.zone}&procedureType={self.procedure_type}&lawId=&lawSearch=&courtLevel={self.court_level}&judgeResult={self.judge_result}&wordCount=&page={page}"
-                print(f"\n- 正在爬取第{page}页: {url}")
+                self.logger.info(f"正在爬取第{page}页: {url}")
                 async with session.get(url, headers=self.headers) as response:
+                    response.raise_for_status()
                     text = await response.text()
+                    self.logger.info(f"====== 爬取成功, 状态码: {response.status} ======")
             except Exception as e:
+                self.logger.error(f"爬取失败: {url}\n"
+                      f"错误信息: {e}")
                 await target_page_queue.put(page)
                 raise e
             # 把keyword中文转换成url编码
@@ -170,10 +178,12 @@ class OpenLawSpider:
             if link_result:
                 self.links[page] = link_result
 
+            await asyncio.sleep(0.15)
+
     async def crawl_links(self) -> bool:
         # 错误处理
         if self.start_page > self.end_page:
-            print(f"起始页{self.start_page}大于结束页{self.end_page}!!!")
+            self.logger.error(f"起始页{self.start_page}大于结束页{self.end_page}!!!")
             return False
         links = {}
         file_name = self.__base_dir + "/links.json"
@@ -183,7 +193,7 @@ class OpenLawSpider:
         target_pages = str_pages.copy()  # ["1", "2", "3", "4", "5", ...]
         # 情况: 链接已经爬取过了
         if os.path.exists(file_name):
-            print(f"======{file_name}已经存在，正在查看======")
+            self.logger.info(f"======{file_name}已经存在，正在查看======")
             links = json.load(open(file_name, "r", encoding="utf-8"))  # 读取在本地的links
             self.links = links
             # 从self.links中删除不在target_pages中的page
@@ -195,14 +205,14 @@ class OpenLawSpider:
                 if page in pages:
                     target_pages.remove(page)
         if len(target_pages) == 0:
-            print(f"======所有链接已经爬取过了======")
+            self.logger.info(f"======所有链接已经爬取过了======")
             return True
 
         target_page_queue = asyncio.Queue()
         for page in target_pages:
             await target_page_queue.put(page)
 
-        print(f"======开始爬取链接======")
+        self.logger.info(f"======开始爬取链接======")
 
         tasks = []
         temp_concurrent = self.concurrent
@@ -213,21 +223,21 @@ class OpenLawSpider:
                 await asyncio.gather(*tasks)
             # [Errno 54] Connection reset by peer
             except Exception as e:
-                print(e)
-                print(f"并发数量超过最大值太多, 减少并发数量[{temp_concurrent} -> {temp_concurrent//2}]")
+                self.logger.error(e)
+                self.logger.info(f"并发数量超过最大值太多, 减少并发数量[{temp_concurrent} -> {temp_concurrent//2}]")
                 temp_concurrent = temp_concurrent // 2
 
             asyncio.sleep(0.1)
 
-        print(f"======链接爬取完结束=====")
+        self.logger.info(f"======链接爬取完结束=====")
 
         if self.links is None or len(self.links.keys()) == 0:
-            print(f"没有爬取到任何符合条件的链接，请更改搜索条件！")
+            self.logger.error(f"没有爬取到任何符合条件的链接，请更改搜索条件！")
             return False
         else:
             with open(file_name, "w", encoding="utf-8") as f:
                 json.dump(self.links, f, ensure_ascii=False)
-            print(f"======{file_name}保存完成======")
+            self.logger.info(f"======{file_name}保存完成======")
             return True
 
     def filter_text(self, text) -> str:
@@ -258,14 +268,14 @@ class OpenLawSpider:
             try:
                 content = {}
                 url = await url_queue.get()
-                print(f"\n- 正在爬取: {url}")
+                self.logger.info(f"\n- 正在爬取: {url}")
                 async with session.get(url, headers=self.headers) as response:
                     text = await response.text()
             except Exception as e:
                 await url_queue.put(url)
                 raise e
             if text is None or len(text) == 0:
-                print(f"爬取失败: {url}")
+                self.logger.error(f"爬取失败: {url}")
                 continue
             soup = BeautifulSoup(text, "html.parser")
             content["链接"] = url
@@ -422,8 +432,13 @@ class OpenLawSpider:
         file_name = self.__base_dir + "/contents.json"
         target_urls = []
         for page, links in self.links.items():
+            if len(target_urls) >= self.num:
+                break
             target_urls.extend(links)
 
+        self.logger.info(f"======共有{len(target_urls)}条链接需要爬取======")
+
+        
         # 打开文件检查是否已经爬取过
         if os.path.exists(file_name):
             contents = json.load(open(file_name, "r", encoding="utf-8"))
@@ -434,6 +449,10 @@ class OpenLawSpider:
             for row in self.contents:
                 if row["链接"] not in target_urls:
                     self.contents.remove(row)
+            # 去除已爬取过的链接
+            for url in urls:
+                if url in target_urls:
+                    target_urls.remove(url)
 
         # 创建队列
         url_queue = asyncio.Queue()
@@ -441,7 +460,7 @@ class OpenLawSpider:
             if url not in urls:
                 await url_queue.put(url)
 
-        print(f"======开始创建爬取任务======")
+        self.logger.info(f"======开始创建爬取任务======")
         temp_concurrent = self.concurrent
         tasks = []
         while (not url_queue.empty()) and (temp_concurrent > 0):
@@ -450,16 +469,16 @@ class OpenLawSpider:
                     tasks.append(self.add_content(url_queue, self.session))
                 await asyncio.gather(*tasks)
             except Exception as e:
-                print(e)
-                print(f"并发数量超过最大值太多, 减少并发数量[{temp_concurrent} -> {temp_concurrent//2}]")
+                self.logger.error(e)
+                self.logger.info(f"并发数量超过最大值太多, 减少并发数量[{temp_concurrent} -> {temp_concurrent//2}]")
                 temp_concurrent = temp_concurrent // 2
             asyncio.sleep(0.1)
 
-        print(f"======内容爬取完成======")
+        self.logger.info(f"======内容爬取完成======")
         # 保存
         with open(file_name, "w", encoding="utf-8") as f:
             json.dump(self.contents, f, ensure_ascii=False)
-        print(f"======{file_name}保存完成======")
+        self.logger.info(f"======{file_name}保存完成======")
 
     def save_to_excel(self):
         df = pd.DataFrame(self.contents)
@@ -467,7 +486,7 @@ class OpenLawSpider:
         file_name = self.__base_dir + "/contents.xlsx"
 
         df.to_excel(file_name, index=False)
-        print(f"======{file_name}保存完成======")
+        self.logger.info(f"======{file_name}保存完成======")
 
     def basic_analysis(self):
         """
@@ -482,16 +501,20 @@ class OpenLawSpider:
         analysis = {}
         # 一审数量、二审数量、再审数量、复核数量、刑罚变更数量、其他数量
         analysis["审判程序"] = {}
+
         for procedure_type in PROCEDURE_TYPE_MAP.keys():
             if procedure_type:
                 analysis["审判程序"][procedure_type] = 0
         for content in self.contents:
             procedure_type = content["程序"]
-            if procedure_type in PROCEDURE_TYPE_MAP.keys():
-                analysis["审判程序"][procedure_type] += 1
-            elif procedure_type in PROCEDURE_TYPE_MAP.values():
-                idx = list(PROCEDURE_TYPE_MAP.values()).index(procedure_type)
-                analysis["审判程序"][list(PROCEDURE_TYPE_MAP.keys())[idx]] += 1
+            if procedure_type:
+                if procedure_type in PROCEDURE_TYPE_MAP.keys():
+                    analysis["审判程序"][procedure_type] += 1
+                elif procedure_type in PROCEDURE_TYPE_MAP.values():
+                    idx = list(PROCEDURE_TYPE_MAP.values()).index(procedure_type)
+                    analysis["审判程序"][list(PROCEDURE_TYPE_MAP.keys())[idx]] += 1
+                else:
+                    continue
             else:
                 continue
         # 裁定书数量、判决书数量、调解书数量、决定书数量、令数量、通知书数量、其他数量
@@ -501,11 +524,14 @@ class OpenLawSpider:
                 analysis["文书类型"][doc_type] = 0
         for content in self.contents:
             doc_type = content["类型"]
-            if doc_type in DOC_TYPE_MAP.keys():
-                analysis["文书类型"][doc_type] += 1
-            elif doc_type in DOC_TYPE_MAP.values():
-                idx = list(DOC_TYPE_MAP.values()).index(doc_type)
-                analysis["文书类型"][list(DOC_TYPE_MAP.keys())[idx]] += 1
+            if doc_type:
+                if doc_type in DOC_TYPE_MAP.keys():
+                    analysis["文书类型"][doc_type] += 1
+                elif doc_type in DOC_TYPE_MAP.values():
+                    idx = list(DOC_TYPE_MAP.values()).index(doc_type)
+                    analysis["文书类型"][list(DOC_TYPE_MAP.keys())[idx]] += 1
+                else:
+                    continue
             else:
                 continue
         # 案由
@@ -555,10 +581,10 @@ class OpenLawSpider:
         }
         while not queue.empty():
             content = await queue.get()
-            print(f"======目前正在处理 [{content['标题']}]======")
+            self.logger.info(f"======目前正在处理 [{content['标题']}]======")
             if not content["庭审过程"]:
                 content.update(default_extraxtion_json)
-                print(f"======✅{content['标题']} 没有庭审过程======")
+                self.logger.info(f"======✅{content['标题']} 没有庭审过程======")
                 continue
             chain = get_conversation_chain(
                 model_name="gpt-3.5-turbo-16k-0613", prompt=LAW_RESULT_TEMPLATE
@@ -574,13 +600,15 @@ class OpenLawSpider:
                 content.update(extraxtion_json)
             except Exception as e:
                 extraxtion_json = default_extraxtion_json
+                self.logger.error(f"======❌{content['标题']} AI处理失败, 错误信息: {e}======"
+                                  "默认使用空的结果")
             content.update(extraxtion_json)
-            print(f"======✅{content['标题']} AI处理完成======")
+            self.logger.info(f"======✅{content['标题']} AI处理完成======")
 
     async def ai_process(self):
         if not self.contents:
             return
-        print("======开始AI处理====")
+        self.logger.info("======开始AI处理====")
         queue = asyncio.Queue()
         for content in self.contents:
             await queue.put(content)
@@ -589,7 +617,7 @@ class OpenLawSpider:
         for i in range(temp_concurrent):
             tasks.append(self.__ask_gpt(queue))
         await asyncio.gather(*tasks)
-        print("======🤖✅AI处理完成======")
+        self.logger.info("======🤖✅AI处理完成======")
 
     @property
     def df(self):

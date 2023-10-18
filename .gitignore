@@ -13,3 +13,6 @@ pytest_cache
 
 # env
 .env
+
+# logs
+logs

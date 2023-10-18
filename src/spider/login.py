@@ -6,6 +6,7 @@ import sys
 import yaml
 import os
 import requests
+from logging import Logger
 
 sys.path.append(str(pathlib.Path(__file__).parent.parent.absolute()))
 
@@ -15,14 +16,15 @@ from utils import encrypt_js, create_dir
 def check_login_status(
     username: str,
     password: str,
+    logger: Logger = None,
 ):
     """
     如果保存的cookie_session有效，则返回cookie_session
     否则返回False
     """
-    print(f"======正在检查用户 {username} 的登录状态======")
+    logger.info(f"======正在检查用户 {username} 的登录状态======")
     if not username or not password:
-        print("用户名或密码为空")
+        logger.info("用户名或密码为空")
         return False
 
     all_user_data_path = (
@@ -32,7 +34,7 @@ def check_login_status(
     user_data_file = all_user_data_path + "/" + username + ".yaml"
 
     if not os.path.exists(user_data_file):
-        print("用户文件不存在")
+        logger.error("用户文件不存在")
         return False
 
     try:
@@ -40,7 +42,7 @@ def check_login_status(
         with open(user_data_file, "r") as f:
             user_data = yaml.load(f, Loader=yaml.FullLoader)
             cookie_session = user_data["cookie_session"]
-            print(f"读取到旧的cookie_session: {cookie_session}")
+            logger.info(f"读取到旧的cookie_session: {cookie_session}")
 
         # 尝试使用旧的session登录
         url = "http://openlaw.cn/"
@@ -59,25 +61,25 @@ def check_login_status(
             "Cache-Control": "no-cache",
         }
 
-        print(f"\n开始提交get请求至 {url}")
+        logger.info(f"开始提交get请求至 {url}")
         try:
             resp = requests.get(url, headers=headers)
             if not resp.status_code == 200:
-                print(f"[{resp.status_code} ERROR] 无法访问: {url}")
+                logger.error(f"[{resp.status_code} ERROR] 无法访问: {url}")
                 return False
-            print(f"[200 OK] 成功访问: {url}")
+            logger.info(f"[200 OK] 成功访问: {url}")
             return cookie_session
-        except:
-            print("旧的session登录失败")
+        except Exception as e:
+            logger.error("旧的session登录失败,原因是: " + str(e))
             return False
 
-    except:
-        print("旧的session登录失败")
+    except Exception as e:
+        logger.error("旧的session登录失败,原因是: " + str(e))
         return False
 
 
 async def new_login_openlaw(
-    username: str, password: str, session: aiohttp.ClientSession
+    username: str, password: str, session: aiohttp.ClientSession, logger: Logger = None
 ) -> str:
     all_user_data_path = (
         str(pathlib.Path(__file__).parent.parent.parent.absolute())
@@ -103,18 +105,18 @@ async def new_login_openlaw(
             "Pragma": "no-cache",
             "Cache-Control": "no-cache",
         }
-        print(f"\n开始提交get请求至 {url}")
+        logger.info(f"\n开始提交get请求至 {url}")
         async with session.get(url, headers=headers) as resp:
             if not resp.status == 200:
-                print(f"[{resp.status} ERROR] 无法访问: {url}")
+                logger.error(f"[{resp.status} ERROR] 无法访问: {url}")
                 return
-            print(f"[200 OK] 成功访问: {url}")
+            logger.info(f"[200 OK] 成功访问: {url}")
             text = await resp.text()
             csrf = re.findall(
                 r'<input type="hidden" name="_csrf" value="(.*)"/>', text
             )[0]
             cookie_session = resp.cookies.get("SESSION").value
-            print(f"SESSION = {cookie_session}")
+            logger.info(f"SESSION = {cookie_session}")
             # 加密
             encrypted_password = encrypt_js(password)
 
@@ -142,12 +144,12 @@ async def new_login_openlaw(
             "password": encrypted_password,
             "_spring_security_remember_me": "true",
         }
-        print(f"\n开始提交post请求至 {url}")
+        logger.info(f"开始提交post请求至 {url}")
         async with session.post(url, headers=headers, data=data) as resp:
             if not resp.status == 200:
-                print(f"[{resp.status} ERROR] 无法访问: {url}")
+                logger.error(f"[{resp.status} ERROR] 无法访问: {url}")
                 return
-            print(f"[200 OK] 成功访问: {url}")
+            logger.info(f"[200 OK] 成功访问: {url}")
 
         # 保存session到用户文件
         with open(user_data_file, "w") as f:
@@ -155,23 +157,23 @@ async def new_login_openlaw(
 
         return "SESSION=" + cookie_session
 
-    except:
-        print("登录失败")
+    except Exception as e:
+        logger.error("登录失败,原因是: " + str(e))
         return None
 
 
 async def login_openlaw(
-    username: str, password: str, session: aiohttp.ClientSession
+    username: str, password: str, session: aiohttp.ClientSession, logger:Logger=None
 ) -> str:
     """
     如果登陆成功: cookie
     如果登陆失败: 返回None
     """
 
-    cookie_session = check_login_status(username, password)
+    cookie_session = check_login_status(username, password, logger)
     if cookie_session:
-        print("登录状态检查成功，无需重新登录")
+        logger.info("登录状态检查成功，无需重新登录")
         return "SESSION=" + cookie_session
     else:
-        print("登录状态检查失败，开始重新登录")
-        return await new_login_openlaw(username, password, session)
+        logger.info("登录状态检查失败，开始重新登录")
+        return await new_login_openlaw(username, password, session, logger=logger)
