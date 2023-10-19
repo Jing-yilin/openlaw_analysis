@@ -45,7 +45,7 @@ def check_login_status(
             logger.info(f"读取到旧的cookie_session: {cookie_session}")
 
         # 尝试使用旧的session登录
-        url = "http://openlaw.cn/"
+        url = "http://openlaw.cn/login.jsp"
         headers = {
             "Host": "openlaw.cn",
             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/118.0",
@@ -67,8 +67,13 @@ def check_login_status(
             if not resp.status_code == 200:
                 logger.error(f"[{resp.status_code} ERROR] 无法访问: {url}")
                 return False
-            logger.info(f"[200 OK] 成功访问: {url}")
-            return cookie_session
+            # 如果resp里面没有set-cookie字段，说明session有效
+            if not resp.headers.get("set-cookie"):
+                logger.info("旧的session登录成功")
+                return cookie_session
+            else:
+                logger.info("旧的session登录失败")
+                return False
         except Exception as e:
             logger.error("旧的session登录失败,原因是: " + str(e))
             return False
@@ -105,7 +110,7 @@ async def new_login_openlaw(
             "Pragma": "no-cache",
             "Cache-Control": "no-cache",
         }
-        logger.info(f"\n开始提交get请求至 {url}")
+        logger.info(f"开始提交get请求至 {url}")
         async with session.get(url, headers=headers) as resp:
             if not resp.status == 200:
                 logger.error(f"[{resp.status} ERROR] 无法访问: {url}")
