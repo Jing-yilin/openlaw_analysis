@@ -158,7 +158,11 @@ async def new_login_openlaw(
 
         # 保存session到用户文件
         with open(user_data_file, "w") as f:
-            yaml.dump({"cookie_session": cookie_session}, f)
+            yaml.dump({
+                "cookie_session": cookie_session,
+                "username": username,
+                "password": password
+                }, f)
 
         return "SESSION=" + cookie_session
 

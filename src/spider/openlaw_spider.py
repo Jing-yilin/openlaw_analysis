@@ -137,7 +137,7 @@ class OpenLawSpider:
         self.judge_date_end = config["判决结束时间"]
         self.num = config["数量"]
         self.start_page = 1
-        self.end_page = (self.num - 1) // 10 + 1
+        self.end_page = (self.num - 1) // 20 + 1
 
         self.headers = {
             "User-Agent": self.user_agent,
@@ -151,6 +151,22 @@ class OpenLawSpider:
         create_dir(self.__base_dir)
         self.logger = logger
 
+        self.logger.info(f"OpenLawSpider:"
+                         f"关键词: {self.keyword}, "
+                         f"案件类型: {self.litigation_type}, "
+                         f"文书类型: {self.doc_type}, "
+                         f"法院（地区）: {self.zone}, "
+                         f"审判程序: {self.procedure_type}, "
+                         f"法院层级: {self.court_level}, "
+                         f"判决结果: {self.judge_result}, "
+                         f"判决开始时间: {self.judge_date_begin}, "
+                         f"判决结束时间: {self.judge_date_end}, "
+                         f"数量: {self.num}, "
+                         f"起始页: {self.start_page}, "
+                         f"结束页: {self.end_page}, "
+                         f"并发数量: {self.concurrent}, "
+                         f"ai_mode: {ai_mode}")
+
     async def get_url(
         self, target_page_queue: asyncio.Queue, session: aiohttp.ClientSession
     ) -> list:
@@ -159,7 +175,7 @@ class OpenLawSpider:
                 page = await target_page_queue.get()
                 keyword_ = requests.utils.quote(self.keyword)
                 url = f"{self.base_url}/search/judgement/advanced?showResults=true&keyword={keyword_}&causeId=&caseNo=&litigationType={self.litigation_type}&docType={self.doc_type}&litigant=&plaintiff=&defendant=&thirdParty=&lawyerId=&lawFirmId=&legals=&courtId=&judgeId=&clerk=&judgeDateYear=&judgeDateBegin={self.judge_date_begin}&judgeDateEnd={self.judge_date_end}&zone={self.zone}&procedureType={self.procedure_type}&lawId=&lawSearch=&courtLevel={self.court_level}&judgeResult={self.judge_result}&wordCount=&page={page}"
-                self.logger.info(f"正在爬取第{page}页: {url}")
+                self.logger.debug(f"正在爬取第{page}页: {url}")
                 async with session.get(url, headers=self.headers) as response:
                     response.raise_for_status()
                     text = await response.text()
@@ -268,7 +284,7 @@ class OpenLawSpider:
             try:
                 content = {}
                 url = await url_queue.get()
-                self.logger.info(f"\n- 正在爬取: {url}")
+                self.logger.debug(f"\n- 正在爬取: {url}")
                 async with session.get(url, headers=self.headers) as response:
                     text = await response.text()
             except Exception as e:
@@ -430,11 +446,14 @@ class OpenLawSpider:
         contents = []
         urls = []  # 已经爬取过的链接
         file_name = self.__base_dir + "/contents.json"
+        
+        # 从self.links中获取需要爬取的链接
         target_urls = []
         for page, links in self.links.items():
             if len(target_urls) >= self.num:
                 break
             target_urls.extend(links)
+        target_urls = target_urls[: self.num] if len(target_urls) > self.num else target_urls
 
         self.logger.info(f"======共有{len(target_urls)}条链接需要爬取======")
 
@@ -445,14 +464,14 @@ class OpenLawSpider:
             self.contents = contents
             # 已经爬取过的链接
             urls = [content["链接"] for content in self.contents]
-            # 去除已爬取过的内容了 链接不属于self.links的内容
-            for row in self.contents:
-                if row["链接"] not in target_urls:
-                    self.contents.remove(row)
             # 去除已爬取过的链接
             for url in urls:
                 if url in target_urls:
                     target_urls.remove(url)
+            # 去除已爬取过的内容了 链接不属于self.links的内容
+            for row in self.contents:
+                if row["链接"] not in target_urls:
+                    self.contents.remove(row)
 
         # 创建队列
         url_queue = asyncio.Queue()
@@ -587,7 +606,7 @@ class OpenLawSpider:
                 self.logger.info(f"======✅{content['标题']} 没有庭审过程======")
                 continue
             chain = get_conversation_chain(
-                model_name="gpt-3.5-turbo-16k-0613", prompt=LAW_RESULT_TEMPLATE
+                model_name="gpt-3.5-turbo-16k", prompt=LAW_RESULT_TEMPLATE, verbose=True
             )
             try:
                 extraxtion = chain.predict(
@@ -609,8 +628,9 @@ class OpenLawSpider:
         if not self.contents:
             return
         self.logger.info("======开始AI处理====")
+        self.ai_contents = self.contents.copy()
         queue = asyncio.Queue()
-        for content in self.contents:
+        for content in self.ai_contents:
             await queue.put(content)
         tasks = []
         temp_concurrent = self.concurrent // 2
@@ -622,6 +642,10 @@ class OpenLawSpider:
     @property
     def df(self):
         return pd.DataFrame(self.contents)
+    
+    @property
+    def ai_df(self):
+        return pd.DataFrame(self.ai_contents)
 
     @property
     def base_dir(self):

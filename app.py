@@ -5,8 +5,14 @@ from codetiming import Timer
 import datetime
 import pandas as pd
 import os
+import pathlib
+import yaml
 
-from src.utils import to_excel, create_dir
+import warnings
+warnings.filterwarnings("ignore")
+
+
+from src.utils import to_excel, create_dir, get_all_user_info
 from datetime import date, datetime
 from src.spider import OpenLawSpider, login_openlaw, check_login_status
 from src.spider.openlaw_spider import (
@@ -18,29 +24,23 @@ from src.spider.openlaw_spider import (
     ZONE_MAP,
 )
 
-import logging
+# log
+from loguru import logger
 from logging import Logger
 
+log_base_dir = "./logs"
 # 初始化日志
-create_dir("./logs")
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-# 创建日志格式化器
-formatter = logging.Formatter("[%(asctime)s] - %(name)s - %(levelname)s - %(message)s")
+create_dir(log_base_dir)
+logger.add(
+    log_base_dir + "/{time:YYYY-MM-DD-HH}.log",
+    format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}",
+    level="DEBUG",
+    encoding="utf-8",
+    backtrace=True,
+    diagnose=True,
+    colorize=True,
+)
 
-if not logger.hasHandlers():
-    # 创建控制台日志处理器
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.DEBUG)
-    # 创建文件日志处理器
-    fh = logging.FileHandler(f"./logs/{datetime.now().strftime('%Y-%m-%d')}_log.log")
-    fh.setLevel(logging.DEBUG)
-    # 将日志格式化器添加到日志处理器
-    ch.setFormatter(formatter)
-    fh.setFormatter(formatter)
-    # 将日志处理器添加到日志对象
-    logger.addHandler(ch)
-    logger.addHandler(fh)
 
 if "step" not in st.session_state:
     st.session_state.step = 0
@@ -50,10 +50,21 @@ if "username" not in st.session_state:
     st.session_state.username = ""
 if "password" not in st.session_state:
     st.session_state.password = ""
+if "use_save_user" not in st.session_state:
+    if get_all_user_info():
+        st.session_state.use_save_user = True
+    else:
+        st.session_state.use_save_user = False
+
+
+def set_session_state_use_save_user(status):
+    st.session_state.use_save_user = status
+    set_session_state_step(0)
 
 
 def set_session_state_step(i):
     st.session_state.step = i
+    logger.debug(f"step: {i}")
 
 
 def set_session_state_login(status):
@@ -88,32 +99,58 @@ async def login_openlaw_st(username, password, logger=logger):
 
 
 async def main(logger: Logger):
-    config = {}
     if st.session_state.step >= 0:
-        logger.info(f"===== st.session_state.step: {st.session_state.step} =====")
         st.title("📖OpenLaw爬取助手")
         ai_mode = st.checkbox("AI模式")
-        openai_sk = st.text_input(
-            "OpenAI SK", type="password", value="", disabled=not ai_mode
-        )
-        # proxy = st.text_input(
-        #     "代理", value="http://127.0.0.1:7890", placeholder="http://", disabled=not ai_mode
-        # )
-        if openai_sk and ai_mode:
-            os.environ["OPENAI_API_KEY"] = openai_sk
-            logger.info(f"OPENAI_API_KEY: {os.environ['OPENAI_API_KEY']}")
-        # if proxy and ai_mode:
-        #     os.environ["HTTP_PROXY"] = proxy
-        #     os.environ["HTTPS_PROXY"] = proxy
+        if ai_mode:
+            openai_sk = st.text_input(
+                "OpenAI SK", type="password", value=None, placeholder="请输入OpenAI SK"
+            )
+            proxy = st.text_input(
+                "代理",
+                value="http://127.0.0.1:7890",
+                placeholder="http://",
+            )
+            if openai_sk:
+                os.environ["OPENAI_API_KEY"] = openai_sk
+            if proxy:
+                os.environ["HTTP_PROXY"] = proxy
 
         if not st.session_state.login:
-            username = st.text_input("用户名", placeholder="请输入openlaw的用户名", value=None)
-            password = st.text_input(
-                "密码",
-                type="password",
-                placeholder="请输入openlaw的密码",
-                value=None,
-            )
+            if st.session_state.use_save_user:
+                if st.button(
+                    "登录新用户",
+                    use_container_width=True,
+                ):
+                    set_session_state_use_save_user(False)
+                    st.rerun()
+            else:
+                if st.button(
+                    "使用保存的用户",
+                    use_container_width=True,
+                ):
+                    set_session_state_use_save_user(True)
+                    st.rerun()
+
+            if st.session_state.use_save_user:
+                all_user_info = get_all_user_info()
+                if len(all_user_info) == 0:
+                    st.warning("没有保存的用户，请登录新用户")
+                    set_session_state_use_save_user(False)
+                    st.rerun()
+                username = st.selectbox("用户名", list(all_user_info.keys()), index=0)
+                password = all_user_info[username]["password"]
+            else:
+                username = st.text_input(
+                    "用户名", placeholder="请输入openlaw的用户名", value=None
+                )
+                password = st.text_input(
+                    "密码",
+                    type="password",
+                    placeholder="请输入openlaw的密码",
+                    value=None,
+                )
+
             if username:
                 password = "" if password is None else password
                 if st.button(
@@ -128,12 +165,11 @@ async def main(logger: Logger):
             st.success(f"用户[{st.session_state.username}]已经登录啦~")
 
     if st.session_state.step >= 1:
-        logger.info(f"===== st.session_state.step: {st.session_state.step} =====")
+        config = {}
 
         config["关键词"] = st.text_input(
             "关键词",
             placeholder="请输入关键词",
-            value="房屋租赁",
             on_change=set_session_state_step,
             args=(1,),
         )
@@ -144,7 +180,10 @@ async def main(logger: Logger):
             args=(1,),
         )
         config["法院（地区）"] = st.selectbox(
-            "法院（地区）", list(ZONE_MAP.keys()), on_change=set_session_state_step, args=(1,)
+            "法院（地区）", 
+            list(ZONE_MAP.keys()), 
+            on_change=set_session_state_step, 
+            args=(1,)
         )
         config["法院层级"] = st.selectbox(
             "法院层级",
@@ -185,10 +224,10 @@ async def main(logger: Logger):
             )
         config["数量"] = st.number_input(
             "您希望至少有多少返回结果（一页20条结果）",
-            1,
-            None,
-            100,
-            20,
+            min_value=1,
+            max_value=None,
+            value=100,
+            step=20,
             on_change=set_session_state_step,
             args=(1,),
         )
@@ -201,7 +240,6 @@ async def main(logger: Logger):
         )
 
     if st.session_state.step >= 2:
-        logger.info(f"===== st.session_state.step: {st.session_state.step} =====")
 
         timer = Timer("timer", logger=None)
         timer.start()
@@ -220,11 +258,7 @@ async def main(logger: Logger):
             # 数据爬取
             logger.info("正在初始化OpenLawSpider")
             spider = OpenLawSpider(
-                config,
-                session=session,
-                concurrent=50,
-                ai_mode=ai_mode,
-                logger=logger
+                config, session=session, concurrent=50, ai_mode=ai_mode, logger=logger
             )
             logger.info("初始化OpenLawSpider成功")
             logger.info("正在爬取链接🔗...")
@@ -255,14 +289,13 @@ async def main(logger: Logger):
                         df.sort_values(by="数量", ascending=False, inplace=True)
                         st.dataframe(df, use_container_width=True)
 
+                logger.info(f"==== 爬取内容成功[共{len(spider.contents)}条] ====")
+                st.subheader(f"爬取内容成功[共{len(spider.contents)}条]")
                 # 下载结果
                 logger.info("正在串行化数据...")
                 df_xlsx = to_excel(spider.df)
                 file_name = spider.base_dir + ".xlsx"
                 st.download_button(label="📥 下载结果", data=df_xlsx, file_name=file_name)
-
-                logger.info(f"==== 爬取内容成功[共{len(spider.contents)}条] ====")
-                st.header(f"爬取内容成功[共{len(spider.contents)}条]")
                 with st.expander("👉查看爬取内容", expanded=False):
                     for content in spider.contents:
                         st.markdown(f"**{content['标题']}**")
@@ -276,6 +309,20 @@ async def main(logger: Logger):
                     with st.spinner("正在AI提取信息，请耐心等待..."):
                         await spider.ai_process()
                     st.subheader("AI提取信息成功")
+                    # 下载结果
+                    logger.info("正在串行化数据...")
+                    df_xlsx = to_excel(spider.ai_df)
+                    file_name = spider.base_dir + "_ai.xlsx"
+                    st.download_button(
+                        label="📥 下载结果(AI)", data=df_xlsx, file_name=file_name
+                    )
+                    with st.expander("👉查看提取内容", expanded=False):
+                        for content in spider.ai_contents:
+                            st.markdown(f"**{content['标题']}**")
+                            df = pd.DataFrame.from_dict(content, orient="index")
+                            df.index.name = "字段"
+                            df.columns = ["内容"]
+                            st.dataframe(df, use_container_width=True)
 
             else:
                 st.error("😭没有找到任何符合条件的链接，请更新参数！")
